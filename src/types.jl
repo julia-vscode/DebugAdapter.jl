@@ -1,247 +1,303 @@
+# *** enumerations ***
+
 const ChecksumAlgorithm = String
-struct ExceptionBreakpointsFilter
-    filter::String
-    label::String
-    default::Union{Nothing,Bool}
-end
+const ChecksumAlgorithms = ("MD5", "SHA1", "SHA256", "timestamp")
 
-struct ColumnDescriptor
-    attributeName::String
-    label::String
-    format::Union{Nothing,String}
-    type::Union{Nothing,String} # default: "string"
-    width::Union{Nothing,Int}
-end
+const ColumnDescriptorType = String
+const ColumnDescriptorTypes = ("string", "number", "boolean", "unixTimestampUTC")
 
-struct Capabilities
-  supportsConfigurationDoneRequest::Union{Nothing,Bool}
-  supportsFunctionBreakpoints::Union{Nothing,Bool}
-  supportsConditionalBreakpoints::Union{Nothing,Bool}
-  supportsHitConditionalBreakpoints::Union{Nothing,Bool}
-  supportsEvaluateForHovers::Union{Nothing,Bool}
-  exceptionBreakpointFilters::Vector{ExceptionBreakpointsFilter}
-  supportsStepBack::Union{Nothing,Bool}
-  supportsSetVariable::Union{Nothing,Bool}
-  supportsRestartFrame::Union{Nothing,Bool}
-  supportsGotoTargetsRequest::Union{Nothing,Bool}
-  supportsStepInTargetsRequest::Union{Nothing,Bool}
-  supportsCompletionsRequest::Union{Nothing,Bool}
-  supportsModulesRequest::Union{Nothing,Bool}
-  additionalModuleColumns::Vector{ColumnDescriptor}
-  supportedChecksumAlgorithms::Vector{ChecksumAlgorithm}
-  supportsRestartRequest::Union{Nothing,Bool}
-  supportsExceptionOptions::Union{Nothing,Bool}
-  supportsValueFormattingOptions::Union{Nothing,Bool}
-  supportsExceptionInfoRequest::Union{Nothing,Bool}
-  supportTerminateDebuggee::Union{Nothing,Bool}
-  supportsDelayedStackTraceLoading::Union{Nothing,Bool}
-  supportsLoadedSourcesRequest::Union{Nothing,Bool}
-  supportsLogPoints::Union{Nothing,Bool}
-  supportsTerminateThreadsRequest::Union{Nothing,Bool}
-  supportsSetExpression::Union{Nothing,Bool}
-  supportsTerminateRequest::Union{Nothing,Bool}
-  supportsDataBreakpoints::Union{Nothing,Bool}
-  supportsReadMemoryRequest::Union{Nothing,Bool}
-  supportsDisassembleRequest::Union{Nothing,Bool}
-end
+const CompletionItemType = String
+const CompletionItemTypes = ("method", "function", "constructor", "field", "variable",
+    "class", "interface", "module", "property", "unit", "value", "enum", "keyword",
+    "snippet", "text", "color", "file", "reference", "customcolor")
 
-struct Message
-    id::Int
-    format::String
-    variables::Union{Nothing,Dict{String,String}}
-    sendTelemetry::Union{Nothing,Bool}
-    showUser::Union{Nothing,Bool}
-    url::Union{Nothing,String}
-    urlLabel::Union{Nothing,String}
-end
+const DataBreakpointAccessType = String
+const DataBreakpointAccessTypes = ("read", "write", "readWrite")
 
-struct Module
-    id::Union{Int,String}
-    name::String
-    path::Union{Nothing,String}
-    isOptimized::Union{Nothing,Bool}
-    isUserCode::Union{Nothing,Bool}
-    version::Union{Nothing,String}
-    symbolStatus::Union{Nothing,String}
-    dateTimeStamp::Union{Nothing,String}
-    addressRange::Union{Nothing,String}
-end
+const ExceptionBreakMode = String
+const ExceptionBreakModes = ("never", "always", "unhandled", "userUnhandled")
 
-struct ModulesViewDescriptor
-    columns::Vector{ColumnDescriptor}
-end
+const LoadedReason = String
+const LoadedReasons = ("new", "changed", "removed")
 
-struct Thread
-    id::Int
-    name::String
-end
+const OutputCategory = String
+const OutputCategories = ("console", "stdout", "stderr", "telemetry")
 
-struct Checksum
+const PathFormat = String
+const PathFormats = ("path", "uri")
+
+const ScopePresentationHint = String
+const ScopePresentationHints = ("arguments", "locals", "registers")
+
+const SourcePresentationHint = String
+const SourcePresentationHints = ("normal", "emphasize", "deemphasize")
+
+const StackFramePresentationHint = String
+const StackFramePresentationHints = ("normal", "label", "subtle")
+
+const StartMethod = String
+const StartMethods = ("launch", "attach", "attachForSuspendedLaunch")
+
+const StoppedReason = String
+const StoppedReasons = ("step", "breakpoint", "exception", "pause", "entry", "goto",
+    "function breakpoint", "data breakpoint")
+
+const TerminalKind = String
+const TerminalKinds = ("integrated", "external")
+
+const VariablePresentationHintAttribute = String
+const VariablePresentationHintAttributes = ("static", "constant", "readOnly", "rawString",
+    "hasObjectId", "canHaveObjectId", "hasSideEffects")
+
+const VariablePresentationHintKind = String
+const VariablePresentationHintkinds = ("property", "method", "class", "data", "event",
+    "baseClass", "innerClass", "interface", "mostDerivedClass", "virtual", "dataBreakpoint")
+
+const VariablePresentationHintVisibility = String
+const VariablePresentationHintVisibilities = ("public", "private", "protected", "internal",
+    "final")
+
+const VariablesFilter = String
+const VariablesFilters = ("indexed", "named")
+
+
+# *** structured types ***
+
+@dictable struct Checksum
     algorithm::ChecksumAlgorithm
     checksum::String
 end
 
-struct Source
-    name::Union{Nothing,String}
-    path::Union{Nothing,String}
-    sourceReference::Union{Nothing,Int}
-    presentationHint::Union{Nothing,String}
-    origin::Union{Nothing,String}
-    sources::Union{Nothing,Vector{Source}}
-    adapterData::Union{Nothing,Any}
-    checksums::Union{Nothing,Vector{Checksum}}
+@dictable struct Source
+    name::Union{Missing,String} = missing
+    path::Union{Missing,String} = missing
+    sourceReference::Union{Missing,Int64} = missing
+    presentationHint::Union{Missing,SourcePresentationHint} = missing
+    origin::Union{Missing,String} = missing
+    sources::Union{Missing,Vector{Source}} = missing
+    adapterData::Union{Missing,Any} = missing
+    checksums::Union{Missing,Vector{Checksum}} = missing
 end
 
-struct StackFrame
-    id::Int
-    name::String
-    source::Union{Nothing,Source}
-    line::Int
-    column::Int
-    endLine::Union{Nothing,Int}
-    endColum::Union{Nothing,Int}
-    instructionPointerReference::Union{Nothing,String}
-    moduleId::Union{Nothing,Int,String}
-    presentationHint::Union{Nothing,String}
-end
-
-struct Scope
-    name::String
-    presentationHint::Union{Nothing,String}
-    variablesReference:Int
-    namedVariables::Union{Nothing,Int}
-    indexedVariables::Union{Nothing,Int}
-    expensive::Bool
-    source::Union{Nothing,Source}#
-    line::Union{Nothing,Int}
-    column::Union{Nothing,Int}
-    endLine::Union{Nothing,Int}
-    endColum::Union{Nothing,Int}
-end
-
-
-struct VariablePresentationHint
-    kind::Union{Nothing,String}
-    attributes::Union{Nothing,Vector{String}}
-    visibility::Union{Nothing,String}
-end
-
-struct Variable
-    name::String
-    value::String
-    type::Union{Nothing,String}
-    presentatonHint::Union{Nothing,VariablePresentationHint}
-    evaluateName::Union{Nothing,String}
-    variablesReference::Int
-    namedVariables::Union{Nothing,Int}
-    indexedVariables::Union{Nothing,Int}
-    memoryReference::Union{Nothing,String}
-end
-
-
-struct SourceBreakpoint
-    line::Int
-    column::Union{Nothing,Int}
-    condition::Union{Nothing,String}
-    hitCondition::Union{Nothing,String}
-    logMessage::Union{Nothing,String}
-end
-
-struct FunctionBreakpoint
-    name::String
-    condition::Union{Nothing,String}
-    hitCondition::Union{Nothing,String}
-end
-
-const DataBreakpointAccessType = String
-struct DataBreakpoint
-    dataId::String
-    accessType::Union{Nothing,DataBreakpointAccessType}
-    condition::Union{Nothing,String}
-    hitCondition::Union{Nothing,String}
-end
-
-struct Breakpoint
-    id::Union{Nothing,Int}
+@dictable struct Breakpoint
+    id::Union{Missing,Int64} = missing
     verified::Bool
-    message::Union{Nothing,String}
-    source::Union{Nothing,Source}
-    line::Union{Nothing,Int}
-    column::Union{Nothing,Int}
-    endLine::Union{Nothing,Int}
-    endColumn::Union{Nothing,Int}
+    message::Union{Missing,String} = missing
+    source::Union{Missing,Source} = missing
+    line::Union{Missing,Int64} = missing
+    column::Union{Missing,Int64} = missing
+    endLine::Union{Missing,Int64} = missing
+    endColumn::Union{Missing,Int64} = missing
 end
 
-
-struct StepInTarget
-    id::Int
+@dictable struct ColumnDescriptor
+    attributeName::String
     label::String
+    format::Union{Missing,String} = missing
+    type::Union{Missing,ColumnDescriptorType} = missing
+    width::Union{Missing,Int64} = missing
 end
 
-struct GotoTarget
-    id::Int    
+@dictable struct ExceptionBreakpointsFilter
+    filter::String
     label::String
-    line::Int
-    column::Union{Nothing,Int}
-    endLine::Union{Nothing,Int}
-    endColumn::Union{Nothing,Int}
-    instructionPointerReference::Union{Nothing,String}
+    default::Union{Missing,Bool} = missing
 end
 
-const CompletionItemType = String
-struct CompletionItem
+@dictable struct Capabilities
+    supportsConfigurationDoneRequest::Union{Missing,Bool} = missing
+    supportsFunctionBreakpoints::Union{Missing,Bool} = missing
+    supportsConditionalBreakpoints::Union{Missing,Bool} = missing
+    supportsHitConditionalBreakpoints::Union{Missing,Bool} = missing
+    supportsEvaluateForHovers::Union{Missing,Bool} = missing
+    exceptionBreakpointFilters::Union{Missing,Vector{ExceptionBreakpointsFilter}} = missing
+    supportsStepBack::Union{Missing,Bool} = missing
+    supportsSetVariable::Union{Missing,Bool} = missing
+    supportsRestartFrame::Union{Missing,Bool} = missing
+    supportsGotoTargetsRequest::Union{Missing,Bool} = missing
+    supportsStepInTargetsRequest::Union{Missing,Bool} = missing
+    supportsCompletionsRequest::Union{Missing,Bool} = missing
+    supportsModulesRequest::Union{Missing,Bool} = missing
+    additionalModuleColumns::Union{Missing,Vector{ColumnDescriptor}} = missing
+    supportedChecksumAlgorithms::Union{Missing,Vector{ChecksumAlgorithm}} = missing
+    supportsRestartRequest::Union{Missing,Bool} = missing
+    supportsExceptionOptions::Union{Missing,Bool} = missing
+    supportsValueFormattingOptions::Union{Missing,Bool} = missing
+    supportsExceptionInfoRequest::Union{Missing,Bool} = missing
+    supportTerminateDebuggee::Union{Missing,Bool} = missing
+    supportsDelayedStackTraceLoading::Union{Missing,Bool} = missing
+    supportsLoadedSourcesRequest::Union{Missing,Bool} = missing
+    supportsLogPoints::Union{Missing,Bool} = missing
+    supportsTerminateThreadsRequest::Union{Missing,Bool} = missing
+    supportsSetExpression::Union{Missing,Bool} = missing
+    supportsTerminateRequest::Union{Missing,Bool} = missing
+    supportsDataBreakpoints::Union{Missing,Bool} = missing
+    supportsReadMemoryRequest::Union{Missing,Bool} = missing
+    supportsDisassembleRequest::Union{Missing,Bool} = missing
+end
+
+@dictable struct CompletionItem
     label::String
-    text::Union{Nothing,String}    
-    type::CompletionItemType
-    start::Union{Nothing,Int}
-    length::Union{Nothing,Int}
+    text::Union{Missing,String} = missing
+    type::Union{Missing, CompletionItemType} = missing
+    start::Union{Missing,Int64} = missing
+    length::Union{Missing,Int64} = missing
 end
 
-struct ValueFormat
-    hex::Union{Nothing,Bool}
+@dictable struct DataBreakpoint
+    dataId::String
+    accessType::Union{Missing,DataBreakpointAccessType} = missing
+    condition::Union{Missing,String} = missing
+    hitCondition::Union{Missing,String} = missing
 end
 
-struct StackFrameFormat
-    parameters::Union{Nothing,Bool}
-    parameterTypes::Union{Nothing,Bool}
-    parameterNames::Union{Nothing,Bool}
-    parameterValues::Union{Nothing,Bool}
-    line::Union{Nothing,Bool}
-    # module::Union{Nothing,Bool}
-    includeAll::Union{Nothing,Bool}
+@dictable struct DisassembledInstruction
+    address::String
+    instructionBytes::Union{Missing,String} = missing
+    instruction::String
+    symbol::Union{Missing,String} = missing
+    location::Union{Missing,Source} = missing
+    line::Union{Missing,Int64} = missing
+    column::Union{Missing,Int64} = missing
+    endLine::Union{Missing,Int64} = missing
+    endColumn::Union{Missing,Int64} = missing
 end
 
-
-const ExceptionBreakMode = String
-ExceptionBreakModes = ["never", "always", "unhandled", "userUnhandled"]
-
-struct ExceptionPathSegment
-    negate::Union{Nothing,Bool}
-    names::Vector{String}
+@dictable struct ExceptionDetails
+    message::Union{Missing,String} = missing
+    typeName::Union{Missing,String} = missing
+    fullTypeName::Union{Missing,String} = missing
+    evaluateName::Union{Missing,String} = missing
+    stackTrace::Union{Missing,String} = missing
+    innerException::Union{Vector{ExceptionDetails}} = missing
 end
 
-struct ExceptionOptions
-    path::Union{Nothing,Vector{ExceptionPathSegment}}
+@dictable struct ExceptionPathSegment
+    negate::Union{Missing,Bool} = missing
+    names::Vector{String} = String[]
+end
+
+@dictable struct ExceptionOptions
+    path::Union{Missing,Vector{ExceptionPathSegment}} = missing
     breakMode::ExceptionBreakMode
 end
 
-struct ExceptionDetails
-    message::Union{Nothing,String}
-    typeName::Union{Nothing,String}
-    fullTypeName::Union{Nothing,String}
-    evaluateName::Union{Nothing,String}
-    stackTrace::Union{Nothing,String}
-    innerException::Union{Nothing,Vector{ExceptionDetails}}
+@dictable struct FunctionBreakpoint
+    name::String
+    condition::Union{Missing,String} = missing
+    hitCondition::Union{Missing,String} = missing
 end
 
-struct DisassembledInstruction
-    address::String
-    instructionBytes::Union{Nothing,String}
-    instruction::String
-    symbol::Union{Nothing,String}
-    location::Union{Nothing,Source}
-    line::Union{Nothing,Int}
-    column::Union{Nothing,Int}
-    endLine::Union{Nothing,Int}
-    endColumn::Union{Nothing,Int}
+@dictable struct GotoTarget
+    id::Int64
+    label::String
+    line::Int64
+    column::Union{Missing,Int64} = missing
+    endLine::Union{Missing,Int64} = missing
+    endColumn::Union{Missing,Int64} = missing
+    instructionPointerReference::Union{Missing,String} = missing
+end
+
+@dictable struct Message
+    id::Int64
+    format::String
+    variables::Union{Missing,Dict{String,String}} = missing
+    sendTelemetry::Union{Missing,Bool} = missing
+    showUser::Union{Missing,Bool} = missing
+    url::Union{Missing,String} = missing
+    urlLabel::Union{Missing,String} = missing
+end
+
+@dictable struct Module
+    id::Union{Int64,String}
+    name::String
+    path::Union{Missing,String} = missing
+    isOptimized::Union{Missing,Bool} = missing
+    isUserCode::Union{Missing,Bool} = missing
+    version::Union{Missing,String} = missing
+    symbolStatus::Union{Missing,String} = missing
+    symbolFilePath::Union{Missing,String} = missing
+    dateTimeStamp::Union{Missing,String} = missing
+    addressRange::Union{Missing,String} = missing
+end
+
+@dictable struct ModulesViewDescriptor
+    columns::Vector{ColumnDescriptor} = ColumnDescriptor[]
+end
+
+@dictable struct Scope
+    name::String
+    presentationHint::Union{Missing,ScopePresentationHint} = missing
+    variablesReference::Int64
+    namedVariables::Union{Missing,Int64} = missing
+    indexedVariables::Union{Missing,Int64} = missing
+    expensive::Bool = false
+    source::Union{Missing,Source} = missing
+    line::Union{Missing,Int64} = missing
+    column::Union{Missing,Int64} = missing
+    endLine::Union{Missing,Int64} = missing
+    endColum::Union{Missing,Int64} = missing
+end
+
+@dictable struct SourceBreakpoint
+    line::Int64
+    column::Union{Missing,Int64} = missing
+    condition::Union{Missing,String} = missing
+    hitCondition::Union{Missing,String} = missing
+    logMessage::Union{Missing,String} = missing
+end
+
+@dictable struct StackFrame
+    id::Int64
+    name::String
+    source::Union{Missing,Source} = missing
+    line::Int64
+    column::Int64
+    endLine::Union{Missing,Int64} = missing
+    endColum::Union{Missing,Int64} = missing
+    instructionPointerReference::Union{Missing,String} = missing
+    moduleId::Union{Missing,Int64,String} = missing
+    presentationHint::Union{Missing,StackFramePresentationHint} = missing
+end
+
+@dictable struct StackFrameFormat
+    parameters::Union{Missing,Bool} = missing
+    parameterTypes::Union{Missing,Bool} = missing
+    parameterNames::Union{Missing,Bool} = missing
+    parameterValues::Union{Missing,Bool} = missing
+    line::Union{Missing,Bool} = missing
+    mod::Union{Missing,Bool} = missing
+    includeAll::Union{Missing,Bool} = missing
+end :module => :mod
+
+@dictable struct StepInTarget
+    id::Int64
+    label::String
+end
+
+@dictable struct Thread
+    id::Int64
+    name::String
+end
+
+@dictable struct ValueFormat
+    hex::Union{Missing,Bool} = missing
+end
+
+@dictable struct VariablePresentationHint
+    kind::Union{Missing,VariablePresentationHintKind} = missing
+    attributes::Union{Missing,Vector{VariablePresentationHintAttribute}} = missing
+    visibility::Union{Missing,VariablePresentationHintVisibility} = missing
+end
+
+@dictable struct Variable
+    name::String
+    value::String
+    type::Union{Missing,String} = missing
+    presentatonHint::Union{Missing,VariablePresentationHint} = missing
+    evaluateName::Union{Missing,String} = missing
+    variablesReference::Int64
+    namedVariables::Union{Missing,Int64} = missing
+    indexedVariables::Union{Missing,Int64} = missing
+    memoryReference::Union{Missing,String} = missing
 end

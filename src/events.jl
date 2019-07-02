@@ -1,65 +1,138 @@
-struct InitializedEvent <: Event end
+# *** event types ***
 
-struct StoppedEvent <: Event
-    reason::String
-    description::Union{Nothing,String}
-    threadId::Union{Nothing,Int}
-    preserveFocusHint::Union{Nothing,Bool}
-    text::Union{Nothing,String}
-    allThreadsStopped::Union{Nothing,Bool}
+@dictable struct Event{T} <: ProtocolMessage
+    seq::Int64
+    body::Union{Missing,T} = missing
+end
+export Event
+
+# event body types provide a custom definition for dispatch on construction from a Dict.
+event_body_type(t::Type{Val{S}}) where S = @error "Event body type for $(t.parameters[1]) undefined."
+
+# event body types provide a custom definition for emitting the appropriate `event` property.
+event_kind(::Type{T}) where T = @error "Event kind for type $(T) undefined."
+event_kind(::Type{Event{T}}) where T = event_kind(T)
+
+# provides both explicit and implicit properties necessary for serialization to JSON
+Base.propertynames(x::Event) = (:seq, :type, :event, :body)
+function Base.getproperty(x::Event{T}, s::Symbol) where T
+    if s === :type
+        :event
+    elseif s === :event
+        event_kind(T)
+    else
+        getfield(x, s)
+    end
 end
 
-struct ContinuedEvent <: Event
-    threadId::Int
-    allThreadsContinued::Union{Nothing,Bool}
+# hook for constructing an Event from a Dict via `ProtocolMessage(::Dict)`
+protocol_message_type(::Type{Val{:event}}) = Event
+
+# construction from a Dict
+function Event(d::Dict)
+    bodytype = event_body_type(Val{Symbol(d["event"])})
+    body = bodytype(get(d, "body", Dict()))
+    Event{bodytype}(d["seq"], body)
 end
 
-struct ExitedEvent <: Event
-    exitCode::Int    
+
+#=
+    @event struct Blah
+        ...
+    end :a=>:b :c=>:d
+
+becomes:
+
+    @dictable struct BlahEventBody
+        ...
+    end :a=>:b :c=>:d
+
+    const BlahEvent = Event{BlahEventBody}
+    export BlahEvent
+    event_body_type(::Type{Val{:blah}}) = BlahEventBody
+    event_kind(::Type{BlahEventBody}) = :blah
+=#
+macro event(structdefn, prs...)
+    corename = structdefn.args[2]
+    expr = QuoteNode(Symbol(lowercasefirst(string(corename))))
+    bodyname = Symbol(string(corename)*"EventBody")
+    aliasname = Symbol(string(corename)*"Event")
+    structdefn.args[2] = bodyname
+    esc(quote
+        @dictable $structdefn $(prs...)
+
+        const $aliasname = Event{$bodyname}
+        export $aliasname
+        event_body_type(::Type{Val{$expr}}) = $bodyname
+        event_kind(::Type{$bodyname}) = $expr
+    end)
 end
 
-struct TerminatedEvent <: Event
-    restart::Union{Nothing,Any}
-end
 
-struct ThreadEvent <: Event
-    reason::String
-    threadId::Int
-end
+# *** concrete event types ***
 
-struct OutputEvent <: Event
-    category::Union{Nothing,String}
-    output::String
-    variablesReference::Union{Nothing,Int}
-    source::Union{Nothing,Source}
-    line::Union{Nothing,Int}
-    column::Union{Nothing,Int}
-    data::Union{Nothing,Any}
-end
-
-struct BreakpointEvent <: Event
+@event struct Breakpoint
     reason::String
     breakpont::Breakpoint
 end
 
-struct ModuleEvent <: Event
-    reason::String
-    mod::Module
+@event struct Capabilities
+    capabilities::Capabilities
 end
 
-struct LoadedSourceEvent <: Event
-    reason::String
+@event struct Continued
+    threadId::Int64
+    allThreadsContinued::Union{Missing,Bool} = missing
+end
+
+@event struct Exited
+    exitCode::Int64
+end
+
+@event struct Initialized end
+
+@event struct LoadedSource
+    reason::LoadedReason
     source::Source
 end
 
-struct ProcessEvent <: Event
-    name::String
-    systemProcessId::Union{Nothing,Int}    
-    isLocalProcess::Union{Nothing,Bool}
-    startMethod::Union{Nothing,String}
-    pointerSize::Union{Nothing,Int}
+@event struct Module
+    reason::LoadedReason
+    mod::Module
+end :module => :mod
+
+@event struct Output
+    category::Union{Missing,String} = "console"
+    output::String
+    variablesReference::Union{Missing,Int64} = missing
+    source::Union{Missing,Source} = missing
+    line::Union{Missing,Int64} = missing
+    column::Union{Missing,Int64} = missing
+    data::Any = missing
 end
 
-struct CapabilitiesEvent <: Event
-    capabilities::Capabilities
+@event struct Process
+    name::String
+    systemProcessId::Union{Missing,Int64} = missing
+    isLocalProcess::Union{Missing,Bool} = missing
+    startMethod::Union{Missing,StartMethod} = missing
+    pointerSize::Union{Missing,Int64} = missing
+end
+
+@event struct Stopped
+    reason::StoppedReason
+    description::Union{Missing,String} = missing
+    threadId::Union{Missing,Int64} = missing
+    preserveFocusHint::Union{Missing,Bool} = missing
+    text::Union{Missing,String} = missing
+    allThreadsStopped::Union{Missing,Bool} = missing
+end
+
+@event struct Terminated
+    restart::Any = missing
+end
+
+@event struct Thread
+    reason::String
+    threadId::Int64
 end

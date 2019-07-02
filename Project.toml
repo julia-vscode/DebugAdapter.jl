@@ -1,0 +1,9 @@
+name = "DebugAdapter"
+uuid = "fd76491a-93db-11e9-3a43-ad80bec6c997"
+
+[deps]
+JSON = "682c06a0-de6a-54ab-a142-c8b1cf79cde6"
+JuliaInterpreter = "aa1ae85d-cabe-5617-a682-6adf51b2e16a"
+
+[compat]
+julia = "1.1"

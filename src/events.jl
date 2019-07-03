@@ -73,7 +73,7 @@ end
 
 @event struct Breakpoint
     reason::String
-    breakpont::Breakpoint
+    breakpoint::Breakpoint
 end
 
 @event struct Capabilities

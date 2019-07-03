@@ -104,10 +104,22 @@ macro dictable(structdefn, prs...)
     esc(ex)
 end
 
+mutable struct DebugAdapterServer
+    pipe_lin
+    pipe_out
+end
+
 include("types.jl")
 include("events.jl")
 include("requests_and_responses.jl")
 include("comm.jl")
 include("server.jl")
+include("responses.jl")
+include("handlers/adapterprocess.jl")
+include("handlers/breakpoints.jl")
+include("handlers/stepping.jl")
+
+function send(response, server::DebugAdapterServer)
+end
 
 end  # module DebugAdapter

@@ -36,6 +36,12 @@ version = "0.6.0"
 [[Logging]]
 uuid = "56ddb016-857b-54e1-b83d-db4d58db5568"
 
+[[MD5]]
+deps = ["Random", "SHA", "Test"]
+git-tree-sha1 = "0f32ae44023b8edf8722ef451b360c0281cd567b"
+uuid = "6ac74813-4b46-53a4-afec-0b5dc9d7885c"
+version = "0.2.0"
+
 [[Markdown]]
 deps = ["Base64"]
 uuid = "d6f4376e-aef5-505a-96c1-9c027394607a"

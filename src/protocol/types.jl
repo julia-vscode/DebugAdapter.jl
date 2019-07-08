@@ -1,5 +1,17 @@
 # *** enumerations ***
 
+export ChecksumAlgorithm, ChecksumAlgorithms, ColumnDescriptorType, ColumnDescriptorTypes,
+    CompletionItemType, CompletionItemTypes, DataBreakpointAccessType,
+    DataBreakpointAccessTypes, ExceptionBreakMode, ExceptionBreakModes, LoadedReason,
+    LoadedReasons, OutputCategory, OutputCategories, PathFormat, PathFormats,
+    ScopePresentationHint, ScopePresentationHints, SourcePresentationHint,
+    SourcePresentationHints, StackFramePresentationHint, StackFramePresentationHints,
+    StartMethod, StartMethods, StoppedReason, StoppedReasons, TerminalKind, TerminalKinds,
+    VariablePresentationHintAttribute, VariablePresentationHintAttributes,
+    VariablePresentationHintKind, VariablePresentationHintKinds,
+    VariablePresentationHintVisibility, VariablePresentationHintVisibilities,
+    VariablesFilter, VariablesFilters
+
 const ChecksumAlgorithm = String
 const ChecksumAlgorithms = ("MD5", "SHA1", "SHA256", "timestamp")
 
@@ -63,23 +75,32 @@ const VariablesFilters = ("indexed", "named")
 
 # *** structured types ***
 
-@dictable struct Checksum
+macro exported_jsonable(structdefn, prs...)
+    structname = structdefn.args[2]
+    barename = structname isa Expr ? structname.args[1] : structname
+    esc(quote
+        @jsonable $structdefn $(prs...)
+        export $barename
+    end)
+end
+
+@jsonable struct Checksum
     algorithm::ChecksumAlgorithm
     checksum::String
 end
 
-@dictable struct Source
+@jsonable struct Source
     name::Union{Missing,String} = missing
     path::Union{Missing,String} = missing
     sourceReference::Union{Missing,Int64} = missing
     presentationHint::Union{Missing,SourcePresentationHint} = missing
     origin::Union{Missing,String} = missing
     sources::Union{Missing,Vector{Source}} = missing
-    adapterData::Union{Missing,Any} = missing
+    adapterData::Any = missing
     checksums::Union{Missing,Vector{Checksum}} = missing
 end
 
-@dictable struct Breakpoint
+@jsonable struct Breakpoint
     id::Union{Missing,Int64} = missing
     verified::Bool
     message::Union{Missing,String} = missing
@@ -90,7 +111,7 @@ end
     endColumn::Union{Missing,Int64} = missing
 end
 
-@dictable struct ColumnDescriptor
+@jsonable struct ColumnDescriptor
     attributeName::String
     label::String
     format::Union{Missing,String} = missing
@@ -98,45 +119,13 @@ end
     width::Union{Missing,Int64} = missing
 end
 
-@dictable struct ExceptionBreakpointsFilter
+@jsonable struct ExceptionBreakpointsFilter
     filter::String
     label::String
     default::Union{Missing,Bool} = missing
 end
 
-@dictable struct Capabilities
-    supportsConfigurationDoneRequest::Union{Missing,Bool} = missing
-    supportsFunctionBreakpoints::Union{Missing,Bool} = missing
-    supportsConditionalBreakpoints::Union{Missing,Bool} = missing
-    supportsHitConditionalBreakpoints::Union{Missing,Bool} = missing
-    supportsEvaluateForHovers::Union{Missing,Bool} = missing
-    exceptionBreakpointFilters::Union{Missing,Vector{ExceptionBreakpointsFilter}} = missing
-    supportsStepBack::Union{Missing,Bool} = missing
-    supportsSetVariable::Union{Missing,Bool} = missing
-    supportsRestartFrame::Union{Missing,Bool} = missing
-    supportsGotoTargetsRequest::Union{Missing,Bool} = missing
-    supportsStepInTargetsRequest::Union{Missing,Bool} = missing
-    supportsCompletionsRequest::Union{Missing,Bool} = missing
-    supportsModulesRequest::Union{Missing,Bool} = missing
-    additionalModuleColumns::Union{Missing,Vector{ColumnDescriptor}} = missing
-    supportedChecksumAlgorithms::Union{Missing,Vector{ChecksumAlgorithm}} = missing
-    supportsRestartRequest::Union{Missing,Bool} = missing
-    supportsExceptionOptions::Union{Missing,Bool} = missing
-    supportsValueFormattingOptions::Union{Missing,Bool} = missing
-    supportsExceptionInfoRequest::Union{Missing,Bool} = missing
-    supportTerminateDebuggee::Union{Missing,Bool} = missing
-    supportsDelayedStackTraceLoading::Union{Missing,Bool} = missing
-    supportsLoadedSourcesRequest::Union{Missing,Bool} = missing
-    supportsLogPoints::Union{Missing,Bool} = missing
-    supportsTerminateThreadsRequest::Union{Missing,Bool} = missing
-    supportsSetExpression::Union{Missing,Bool} = missing
-    supportsTerminateRequest::Union{Missing,Bool} = missing
-    supportsDataBreakpoints::Union{Missing,Bool} = missing
-    supportsReadMemoryRequest::Union{Missing,Bool} = missing
-    supportsDisassembleRequest::Union{Missing,Bool} = missing
-end
-
-@dictable struct CompletionItem
+@jsonable struct CompletionItem
     label::String
     text::Union{Missing,String} = missing
     type::Union{Missing, CompletionItemType} = missing
@@ -144,14 +133,14 @@ end
     length::Union{Missing,Int64} = missing
 end
 
-@dictable struct DataBreakpoint
+@jsonable struct DataBreakpoint
     dataId::String
     accessType::Union{Missing,DataBreakpointAccessType} = missing
     condition::Union{Missing,String} = missing
     hitCondition::Union{Missing,String} = missing
 end
 
-@dictable struct DisassembledInstruction
+@jsonable struct DisassembledInstruction
     address::String
     instructionBytes::Union{Missing,String} = missing
     instruction::String
@@ -163,7 +152,7 @@ end
     endColumn::Union{Missing,Int64} = missing
 end
 
-@dictable struct ExceptionDetails
+@jsonable struct ExceptionDetails
     message::Union{Missing,String} = missing
     typeName::Union{Missing,String} = missing
     fullTypeName::Union{Missing,String} = missing
@@ -172,23 +161,23 @@ end
     innerException::Union{Vector{ExceptionDetails}} = missing
 end
 
-@dictable struct ExceptionPathSegment
+@jsonable struct ExceptionPathSegment
     negate::Union{Missing,Bool} = missing
     names::Vector{String} = String[]
 end
 
-@dictable struct ExceptionOptions
+@jsonable struct ExceptionOptions
     path::Union{Missing,Vector{ExceptionPathSegment}} = missing
     breakMode::ExceptionBreakMode
 end
 
-@dictable struct FunctionBreakpoint
+@jsonable struct FunctionBreakpoint
     name::String
     condition::Union{Missing,String} = missing
     hitCondition::Union{Missing,String} = missing
 end
 
-@dictable struct GotoTarget
+@jsonable struct GotoTarget
     id::Int64
     label::String
     line::Int64
@@ -198,7 +187,7 @@ end
     instructionPointerReference::Union{Missing,String} = missing
 end
 
-@dictable struct Message
+@jsonable struct Message
     id::Int64
     format::String
     variables::Union{Missing,Dict{String,String}} = missing
@@ -208,7 +197,7 @@ end
     urlLabel::Union{Missing,String} = missing
 end
 
-@dictable struct Module
+@jsonable struct Module
     id::Union{Int64,String}
     name::String
     path::Union{Missing,String} = missing
@@ -221,11 +210,11 @@ end
     addressRange::Union{Missing,String} = missing
 end
 
-@dictable struct ModulesViewDescriptor
+@jsonable struct ModulesViewDescriptor
     columns::Vector{ColumnDescriptor} = ColumnDescriptor[]
 end
 
-@dictable struct Scope
+@jsonable struct Scope
     name::String
     presentationHint::Union{Missing,ScopePresentationHint} = missing
     variablesReference::Int64
@@ -239,7 +228,7 @@ end
     endColum::Union{Missing,Int64} = missing
 end
 
-@dictable struct SourceBreakpoint
+@jsonable struct SourceBreakpoint
     line::Int64
     column::Union{Missing,Int64} = missing
     condition::Union{Missing,String} = missing
@@ -247,7 +236,7 @@ end
     logMessage::Union{Missing,String} = missing
 end
 
-@dictable struct StackFrame
+@jsonable struct StackFrame
     id::Int64
     name::String
     source::Union{Missing,Source} = missing
@@ -260,7 +249,7 @@ end
     presentationHint::Union{Missing,StackFramePresentationHint} = missing
 end
 
-@dictable struct StackFrameFormat
+@jsonable struct StackFrameFormat
     parameters::Union{Missing,Bool} = missing
     parameterTypes::Union{Missing,Bool} = missing
     parameterNames::Union{Missing,Bool} = missing
@@ -270,27 +259,27 @@ end
     includeAll::Union{Missing,Bool} = missing
 end :module => :mod
 
-@dictable struct StepInTarget
+@jsonable struct StepInTarget
     id::Int64
     label::String
 end
 
-@dictable struct Thread
+@jsonable struct Thread
     id::Int64
     name::String
 end
 
-@dictable struct ValueFormat
+@jsonable struct ValueFormat
     hex::Union{Missing,Bool} = missing
 end
 
-@dictable struct VariablePresentationHint
+@jsonable struct VariablePresentationHint
     kind::Union{Missing,VariablePresentationHintKind} = missing
     attributes::Union{Missing,Vector{VariablePresentationHintAttribute}} = missing
     visibility::Union{Missing,VariablePresentationHintVisibility} = missing
 end
 
-@dictable struct Variable
+@jsonable struct Variable
     name::String
     value::String
     type::Union{Missing,String} = missing

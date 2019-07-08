@@ -1,19 +1,24 @@
 # *** event types ***
 
-@dictable struct Event{T} <: ProtocolMessage
+@jsonable struct Event{T} <: ProtocolMessage
     seq::Int64
     body::Union{Missing,T} = missing
 end
-export Event
 
-# event body types provide a custom definition for dispatch on construction from a Dict.
-event_body_type(t::Type{Val{S}}) where S = @error "Event body type for $(t.parameters[1]) undefined."
+# Event body types provide a custom definition for dispatch on construction from a Dict.
+function event_body_type(t::Type{Val{S}}) where S
+    @error "Event body type for $(t.parameters[1]) undefined."
+end
+export event_body_type
 
-# event body types provide a custom definition for emitting the appropriate `event` property.
+# Event body types provide a custom definition for emitting the appropriate `event`
+# property.
 event_kind(::Type{T}) where T = @error "Event kind for type $(T) undefined."
 event_kind(::Type{Event{T}}) where T = event_kind(T)
+event_kind(x) = event_kind(typeof(x))
+export event_kind
 
-# provides both explicit and implicit properties necessary for serialization to JSON
+# Provides both explicit and implicit properties necessary for serialization to JSON.
 Base.propertynames(x::Event) = (:seq, :type, :event, :body)
 function Base.getproperty(x::Event{T}, s::Symbol) where T
     if s === :type
@@ -43,7 +48,7 @@ end
 
 becomes:
 
-    @dictable struct BlahEventBody
+    @jsonable struct BlahEventBody
         ...
     end :a=>:b :c=>:d
 
@@ -59,7 +64,7 @@ macro event(structdefn, prs...)
     aliasname = Symbol(string(corename)*"Event")
     structdefn.args[2] = bodyname
     esc(quote
-        @dictable $structdefn $(prs...)
+        @exported_jsonable $structdefn $(prs...)
 
         const $aliasname = Event{$bodyname}
         export $aliasname
@@ -102,7 +107,7 @@ end
 end :module => :mod
 
 @event struct Output
-    category::Union{Missing,String} = "console"
+    category::Union{Missing,String} = missing
     output::String
     variablesReference::Union{Missing,Int64} = missing
     source::Union{Missing,Source} = missing

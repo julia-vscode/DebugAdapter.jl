@@ -1,19 +1,25 @@
 # *** request types ***
 
-@dictable struct Request{T} <: ProtocolMessage
+@jsonable struct Request{T} <: ProtocolMessage
     seq::Int64
     arguments::Union{Missing,T} = missing
 end
-export Request
 
-# request arguments types provide a custom definition for dispatch on construction from a Dict.
-request_arguments_type(t::Type{Val{S}}) where S = @error "Request arguments type for $(t.parameters[1]) undefined."
+# Request arguments types provide a custom definition for dispatch on construction from a
+# Dict.
+function request_arguments_type(t::Type{Val{S}}) where S
+    @error "Request arguments type for $(t.parameters[1]) undefined."
+end
+export request_arguments_type
 
-# request arguments types provide a custom definition for emitting the appropriate `command` property.
+# Request arguments types provide a custom definition for emitting the appropriate `command`
+# property.
 request_command(::Type{T}) where T = @error "Request command for type $(T) undefined."
 request_command(::Type{Request{T}}) where T = request_command(T)
+request_command(x) = request_command(typeof(x))
+export request_command
 
-# provides both explicit and implicit properties necessary for serialization to JSON
+# Provides both explicit and implicit properties necessary for serialization to JSON.
 Base.propertynames(x::Request) = (:seq, :type, :command, :arguments)
 function Base.getproperty(x::Request{T}, s::Symbol) where T
     if s === :type
@@ -43,14 +49,14 @@ end
 
 becomes:
 
-    @dictable struct BlahRequestArguments
+    @jsonable struct BlahRequestArguments
         ...
     end :a=>:b :c=>:d
 
     const BlahRequest = Request{BlahRequestArguments}
     export BlahRequest
     request_arguments_type(::Type{Val{:blah}}) = BlahRequestArguments
-    request_symbol(::Type{BlahRequestArguments}) = :blah
+    request_command(::Type{BlahRequestArguments}) = :blah
 =#
 macro request(structdefn, prs...)
     corename = structdefn.args[2]
@@ -59,7 +65,7 @@ macro request(structdefn, prs...)
     aliasname = Symbol(string(corename)*"Request")
     structdefn.args[2] = bodyname
     esc(quote
-        @dictable $structdefn $(prs...)
+        @jsonable $structdefn $(prs...)
 
         const $aliasname = Request{$bodyname}
         export $aliasname
@@ -71,7 +77,7 @@ end
 
 # *** response types ***
 
-@dictable struct Response{T} <: ProtocolMessage
+@jsonable struct Response{T} <: ProtocolMessage
     seq::Int64
     request_seq::Int64
     success::Bool = true
@@ -80,15 +86,24 @@ end
 end
 export Response
 
-# response body types provide a custom definition for dispatch on construction from a Dict.
-response_body_type(t::Type{Val{S}}) where S = @error "Response body type for $(t.parameters[1]) undefined."
+# Response body types provide a custom definition for dispatch on construction from a Dict.
+function response_body_type(t::Type{Val{S}}) where S
+    @error "Response body type for $(t.parameters[1]) undefined."
+end
+export response_body_type
 
-# response body types provide a custom definition for emitting the appropriate `command` property.
+# Response body types provide a custom definition for emitting the appropriate `command`
+# property.
 response_command(::Type{T}) where T = @error "Response command for type $(T) undefined."
 response_command(::Type{Response{T}}) where T = response_command(T)
+response_command(x) = response_command(typeof(x))
+export response_command
 
-# provides both explicit and implicit properties necessary for serialization to JSON
-Base.propertynames(x::Response) = (:seq, :type, :request_seq, :success, :command, :message, :body)
+# Provides both explicit and implicit properties necessary for serialization to JSON
+function Base.propertynames(x::Response)
+    (:seq, :type, :request_seq, :success, :command, :message, :body)
+end
+
 function Base.getproperty(x::Response{T}, s::Symbol) where T
     if s === :type
         :response
@@ -111,27 +126,6 @@ function Response(d::Dict)
     Response{bodytype}(d["seq"], d["request_seq"], success, msg, body)
 end
 
-
-#=
-    @declare_response_body(:blah, BlahResponseBody)
-
-becomes:
-
-    const BlahResponse = Response{BlahResponseBody}
-    export BlahResponse
-    response_body_type(::Type{Val{:blah}}) = BlahResponseBody
-    response_command(::Type{BlahResponseBody}) = :blah
-=#
-macro declare_response_body(sym, typ)
-    alias = Symbol(uppercasefirst(string(sym))*"Response")
-    esc(quote
-        const $alias = Response{$typ}
-        export $alias
-        response_body_type(::Type{Val{$sym}}) = $typ
-        response_command(::Type{$typ}) = $sym
-    end)
-end
-
 #=
     @response struct Blah
         ...
@@ -139,23 +133,33 @@ end
 
 becomes:
 
-    @dictable struct BlahResponseBody
+    @jsonable struct BlahResponseBody
         ...
         error::Union{Missing,Message} = missing
     end :a=>:b :c=>:d
 
-    @declare_response_body(:blah, BlahResponseBody)
+    const BlahResponse = Response{BlahResponseBody}
+    export BlahResponse
+    response_body_type(::Type{Val{:blah}}) = BlahResponseBody
+    response_command(::Type{BlahResponseBody}) = :blah
+
+Note that an `error` field is injected so that all response body types automatically support
+# the `ErrorResponse` interface.
 =#
 macro response(structdefn, prs...)
     corename = string(structdefn.args[2])
     qsym = QuoteNode(Symbol(lowercasefirst(corename)))
+    alias = Symbol(corename*"Response")
     bodyname = Symbol(corename*"ResponseBody")
     structdefn.args[2] = bodyname
     push!(structdefn.args[3].args, :(error::Union{Missing,Message} = missing))
     esc(quote
-        @dictable $structdefn $(prs...)
+        @jsonable $structdefn $(prs...)
 
-        @declare_response_body($qsym, $bodyname)
+        const $alias = Response{$bodyname}
+        export $alias
+        response_body_type(::Type{Val{$qsym}}) = $bodyname
+        response_command(::Type{$bodyname}) = $qsym
     end)
 end
 
@@ -163,7 +167,7 @@ end
 # *** concrete request and response types ***
 
 @request struct Attach
-    __restart::Union{Missing,Any} = missing
+    __restart::Any = missing
 end
 
 @response struct Attach end
@@ -197,7 +201,7 @@ end
 end
 
 @response struct DataBreakpointInfo
-    dataId::Union{Nothing,String} = nothing
+    dataId::Union{Missing,String} = missing
     description::String
     accessTypes::Union{Missing,Vector{DataBreakpointAccessType}} = missing
     canPersist::Union{Missing,Bool} = missing
@@ -281,7 +285,39 @@ end
     supportsMemoryReferences::Union{Missing,Bool} = missing
 end
 
-@declare_response_body :initialize Capabilities
+@response struct Initialize
+    supportsConfigurationDoneRequest::Union{Missing,Bool} = missing
+    supportsFunctionBreakpoints::Union{Missing,Bool} = missing
+    supportsConditionalBreakpoints::Union{Missing,Bool} = missing
+    supportsHitConditionalBreakpoints::Union{Missing,Bool} = missing
+    supportsEvaluateForHovers::Union{Missing,Bool} = missing
+    exceptionBreakpointFilters::Union{Missing,Vector{ExceptionBreakpointsFilter}} = missing
+    supportsStepBack::Union{Missing,Bool} = missing
+    supportsSetVariable::Union{Missing,Bool} = missing
+    supportsRestartFrame::Union{Missing,Bool} = missing
+    supportsGotoTargetsRequest::Union{Missing,Bool} = missing
+    supportsStepInTargetsRequest::Union{Missing,Bool} = missing
+    supportsCompletionsRequest::Union{Missing,Bool} = missing
+    supportsModulesRequest::Union{Missing,Bool} = missing
+    additionalModuleColumns::Union{Missing,Vector{ColumnDescriptor}} = missing
+    supportedChecksumAlgorithms::Union{Missing,Vector{ChecksumAlgorithm}} = missing
+    supportsRestartRequest::Union{Missing,Bool} = missing
+    supportsExceptionOptions::Union{Missing,Bool} = missing
+    supportsValueFormattingOptions::Union{Missing,Bool} = missing
+    supportsExceptionInfoRequest::Union{Missing,Bool} = missing
+    supportTerminateDebuggee::Union{Missing,Bool} = missing
+    supportsDelayedStackTraceLoading::Union{Missing,Bool} = missing
+    supportsLoadedSourcesRequest::Union{Missing,Bool} = missing
+    supportsLogPoints::Union{Missing,Bool} = missing
+    supportsTerminateThreadsRequest::Union{Missing,Bool} = missing
+    supportsSetExpression::Union{Missing,Bool} = missing
+    supportsTerminateRequest::Union{Missing,Bool} = missing
+    supportsDataBreakpoints::Union{Missing,Bool} = missing
+    supportsReadMemoryRequest::Union{Missing,Bool} = missing
+    supportsDisassembleRequest::Union{Missing,Bool} = missing
+end
+const Capabilities = InitializeResponseBody
+export Capabilities
 
 @request struct Launch
     noDebug::Union{Missing,Bool} = missing

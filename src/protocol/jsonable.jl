@@ -39,7 +39,7 @@ properties whose values satisfy !ismissing. If all properties are missing, retur
 `missing`.
 """
 function json_lower_omit_missings(x)
-    syms = filter(k->!ismissing(getproperty(x,k)), propertynames(x))
+    syms = filter(k->!ismissing(getproperty(x,k)), collect(propertynames(x)))
     isempty(syms) ? missing : JSON.Writer.CompositeTypeWrapper(x, syms)
 end
 

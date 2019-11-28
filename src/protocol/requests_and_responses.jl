@@ -59,10 +59,13 @@ becomes:
     request_command(::Type{BlahRequestArguments}) = :blah
 =#
 macro request(structdefn, prs...)
-    corename = structdefn.args[2]
+    aliasname = structdefn.args[2] 
+    corename = Symbol(string(aliasname)[1:end-7])
+
+    # corename = structdefn.args[2]
     expr = QuoteNode(Symbol(lowercasefirst(string(corename))))
     bodyname = Symbol(string(corename)*"RequestArguments")
-    aliasname = Symbol(string(corename)*"Request")
+    # aliasname = Symbol(string(corename)*"Request")
     structdefn.args[2] = bodyname
     esc(quote
         @jsonable $structdefn $(prs...)
@@ -78,6 +81,8 @@ end
 # *** response types ***
 
 @jsonable struct Response{T} <: ProtocolMessage
+    type::String = "response"
+    command::String
     seq::Int64
     request_seq::Int64
     success::Bool = true
@@ -147,9 +152,12 @@ Note that an `error` field is injected so that all response body types automatic
 # the `ErrorResponse` interface.
 =#
 macro response(structdefn, prs...)
-    corename = string(structdefn.args[2])
+    alias = structdefn.args[2]
+    corename = String(string(alias)[1:end-8])
+
+    # corename = string(structdefn.args[2])
     qsym = QuoteNode(Symbol(lowercasefirst(corename)))
-    alias = Symbol(corename*"Response")
+    # alias = Symbol(corename*"Response")
     bodyname = Symbol(corename*"ResponseBody")
     structdefn.args[2] = bodyname
     push!(structdefn.args[3].args, :(error::Union{Missing,Message} = missing))
@@ -166,48 +174,48 @@ end
 
 # *** concrete request and response types ***
 
-@request struct Attach
+@request struct AttachRequest
     __restart::Any = missing
 end
 
-@response struct Attach end
+@response struct AttachResponse end
 
-@request struct Completions
+@request struct CompletionsRequest
     frameId::Union{Missing,Int64} = missing
     text::String
     column::Int64
     line::Union{Missing,Int64} = missing
 end
 
-@response struct Completions
+@response struct CompletionsResponse
     targets::Vector{CompletionItem} = CompletionItem[]
 end
 
-@request struct ConfigurationDone end
+@request struct ConfigurationDoneRequest end
 
-@response struct ConfigurationDone end
+@response struct ConfigurationDoneResponse end
 
-@request struct Continue
+@request struct ContinueRequest
     threadId::Int64
 end
 
-@response struct Continue
+@response struct ContinueResponse
     allThreadsContinued::Union{Missing,Bool} = missing
 end
 
-@request struct DataBreakpointInfo
+@request struct DataBreakpointInfoRequest
     variableReference::Union{Missing,Int64} = missing
     name::String
 end
 
-@response struct DataBreakpointInfo
+@response struct DataBreakpointInfoResponse
     dataId::Union{Missing,String} = missing
     description::String
     accessTypes::Union{Missing,Vector{DataBreakpointAccessType}} = missing
     canPersist::Union{Missing,Bool} = missing
 end
 
-@request struct Disassemble
+@request struct DisassembleRequest
     memoryReference::String
     offset::Union{Missing,Int64} = missing
     instructionOffset::Union{Missing,Int64} = missing
@@ -215,25 +223,25 @@ end
     resolveSymbols::Union{Missing,Bool} = missing
 end
 
-@response struct Disassemble
+@response struct DisassembleResponse
     instructions::Vector{DisassembledInstruction} = DisassembledInstruction[]
 end
 
-@request struct Disconnect
+@request struct DisconnectRequest
     restart::Union{Missing,Bool} = missing
     terminateDebuggee::Union{Missing,Bool} = missing
 end
 
-@response struct Disconnect end
+@response struct DisconnectResponse end
 
-@request struct Evaluate
+@request struct EvaluateRequest
     expression::String
     frameId::Union{Missing,Int64} = missing
     context::Union{Missing,String} = missing
     format::Union{Missing,ValueFormat} = missing
 end
 
-@response struct Evaluate
+@response struct EvaluateResponse
     result::String
     type::Union{Missing,String} = missing
     presentationHint::Union{Missing,VariablePresentationHint} = missing
@@ -243,35 +251,35 @@ end
     memoryReference::Union{Missing,String} = missing
 end
 
-@request struct ExceptionInfo
+@request struct ExceptionInfoRequest
     threadId::Int64
 end
 
-@response struct ExceptionInfo
+@response struct ExceptionInfoResponse
     exceptionId::String
     description::Union{Missing,String} = missing
     breakMode::ExceptionBreakMode
     details::Union{Missing,ExceptionDetails} = missing
 end
 
-@request struct Goto
+@request struct GotoRequest
     threadId::Int64
     targetId::Int64
 end
 
-@response struct Goto end
+@response struct GotoResponse end
 
-@request struct GotoTargets
+@request struct GotoTargetsRequest
     source::Source
     line::Int64
     column::Union{Missing,Int64} = missing
 end
 
-@response struct GotoTargets
+@response struct GotoTargetsResponse
     targets::Vector{GotoTarget} = GotoTarget[]
 end
 
-@request struct Initialize
+@request struct InitializeRequest
     clientID::Union{Missing,String} = missing
     clientName::Union{Missing,String} = missing
     adapterID::String
@@ -285,7 +293,7 @@ end
     supportsMemoryReferences::Union{Missing,Bool} = missing
 end
 
-@response struct Initialize
+@response struct InitializeResponse
     supportsConfigurationDoneRequest::Union{Missing,Bool} = missing
     supportsFunctionBreakpoints::Union{Missing,Bool} = missing
     supportsConditionalBreakpoints::Union{Missing,Bool} = missing
@@ -319,70 +327,70 @@ end
 const Capabilities = InitializeResponseBody
 export Capabilities
 
-@request struct Launch
+@request struct LaunchRequest
     noDebug::Union{Missing,Bool} = missing
     __restart::Any = missing
 end
 
-@response struct Launch end
+@response struct LaunchResponse end
 
-@request struct LoadedSources end
+@request struct LoadedSourcesRequest end
 
-@response struct LoadedSources
-    sources::Vector{Source} = Sources[]
+@response struct LoadedSourcesResponse
+    sources::Vector{Source} = Source[]
 end
 
-@request struct Modules
+@request struct ModulesRequest
     startModule::Union{Missing,Int64} = missing
     moduleCount::Union{Missing,Int64} = missing
 end
 
-@response struct Modules
+@response struct ModulesResponse
     modules::Vector{Module} = Module[]
     totalModules::Union{Missing,Int64} = missing
 end
 
-@request struct Next
+@request struct NextRequest
     threadId::Int64
 end
 
-@response struct Next end
+@response struct NextResponse end
 
-@request struct Pause
+@request struct PauseRequest
     threadId::Int64
 end
 
-@response struct Pause end
+@response struct PauseResponse end
 
-@request struct ReadMemory
+@request struct ReadMemoryRequest
     memoryReference::String
     offset::Union{Missing,Int64} = missing
     count::Int64
 end
 
-@response struct ReadMemory
+@response struct ReadMemoryResponse
     address::String
     unreadableBytes::Union{Missing,Int64} = missing
     data::Union{Missing,String} = missing
 end
 
-@request struct Restart end
+@request struct RestartRequest end
 
-@response struct Restart end
+@response struct RestartResponse end
 
-@request struct RestartFrame
+@request struct RestartFrameRequest
     frameId::Int64
 end
 
-@response struct RestartFrame end
+@response struct RestartFrameResponse end
 
-@request struct ReverseContinue
+@request struct ReverseContinueRequest
     threadId::Int64
 end
 
-@response struct ReverseContinue end
+@response struct ReverseContinueResponse end
 
-@request struct RunInTerminal
+@request struct RunInTerminalRequest
     kind::Union{Missing,TerminalKind} = missing
     title::Union{Missing,String} = missing
     cwd::String
@@ -390,53 +398,53 @@ end
     env::Union{Missing,Dict{String,Union{Nothing,String}}} = missing
 end
 
-@response struct RunInTerminal
+@response struct RunInTerminalResponse
     processId::Union{Missing,Int64} = missing
     shellProcessId::Union{Missing,Int64} = missing
 end
 
-@request struct Scopes
+@request struct ScopesRequest
     frameId::Int64
 end
 
-@response struct Scopes
+@response struct ScopesResponse
    scopes::Vector{Scope} = Scope[]
 end
 
-@request struct SetBreakpoints
+@request struct SetBreakpointsRequest
     source::Source
     breakpoints::Union{Missing,Vector{SourceBreakpoint}} = missing
     lines::Union{Missing, Vector{Int64}} = missing
     sourceModified::Union{Missing,Bool} = missing
 end
 
-@response struct SetBreakpoints
+@response struct SetBreakpointsResponse
     breakpoints::Vector{Breakpoint} = Breakpoint[]
 end
 
-@request struct SetDataBreakpoints
+@request struct SetDataBreakpointsRequest
     breakpoints::Vector{DataBreakpoint} = DataBreakpoint[]
 end
 
-@response struct SetDataBreakpoints
+@response struct SetDataBreakpointsResponse
     breakpoints::Vector{Breakpoint} = Breakpoint[]
 end
 
-@request struct SetExceptionBreakpoints
+@request struct SetExceptionBreakpointsRequest
     filters::Vector{String} = String[]
     exceptionOptions::Union{Missing,Vector{ExceptionOptions}} = missing
 end
 
-@response struct SetExceptionBreakpoints end
+@response struct SetExceptionBreakpointsResponse end
 
-@request struct SetExpression
+@request struct SetExpressionRequest
     expression::String
     value::String
     frameId::Union{Missing,Int64} = missing
     format::Union{Missing,ValueFormat} = missing
 end
 
-@response struct SetExpression
+@response struct SetExpressionResponse
     value::String
     type::Union{Missing,String} = missing
     presentationHint::Union{Missing,VariablePresentationHint} = missing
@@ -445,22 +453,22 @@ end
     indexedVariables::Union{Missing,Int64} = missing
 end
 
-@request struct SetFunctionBreakpoints
+@request struct SetFunctionBreakpointsRequest
     breakpoints::Vector{FunctionBreakpoint} = FunctionBreakpoint[]
 end
 
-@response struct SetFunctionBreakpoints
+@response struct SetFunctionBreakpointsResponse
     breakpoints::Vector{Breakpoint} = Breakpoint[]
 end
 
-@request struct SetVariable
+@request struct SetVariableRequest
     variablesReference::Int64
     name::String
     value::String
     format::Union{Missing,ValueFormat} = missing
 end
 
-@response struct SetVariable
+@response struct SetVariableResponse
     value::String
     type::Union{Missing,String} = missing
     variablesReference::Union{Missing,Int64} = missing
@@ -468,74 +476,74 @@ end
     indexedVariables::Union{Missing,Int64} = missing
 end
 
-@request struct Source
+@request struct SourceRequest
     source::Union{Missing,Source} = missing
     sourceReference::Int64
 end
 
-@response struct Source
+@response struct SourceResponse
     content::String
     mimeType::Union{Missing,String} = missing
 end
 
-@request struct StackTrace
+@request struct StackTraceRequest
     threadId::Int64
     startFrame::Union{Missing,Int64} = missing
     levels::Union{Missing,Int64} = missing
     format::Union{Missing,StackFrameFormat} = missing
 end
 
-@response struct StackTrace
+@response struct StackTraceResponse
     stackFrames::Vector{StackFrame} = StackFrame[]
     totalFrames::Union{Missing,Int64} = missing
 end
 
-@request struct StepBack
+@request struct StepBackRequest
     threadId::Int64
 end
 
-@response struct StepBack end
+@response struct StepBackResponse end
 
-@request struct StepIn
+@request struct StepInRequest
     threadId::Int64
     targetId::Union{Missing,Int64} = missing
 end
 
-@response struct StepIn end
+@response struct StepInResponse end
 
-@request struct StepInTargets
+@request struct StepInTargetsRequest
     frameId::Int64
 end
 
-@response struct StepInTargets
+@response struct StepInTargetsResponse
     targets::Vector{StepInTarget} = StepInTarget[]
 end
 
-@request struct StepOut
+@request struct StepOutRequest
     threadId::Int64
 end
 
-@response struct StepOut end
+@response struct StepOutResponse end
 
-@request struct Terminate
+@request struct TerminateRequest
     restart::Union{Missing,Bool} = missing
 end
 
-@response struct Terminate end
+@response struct TerminateResponse end
 
-@request struct TerminateThreads
+@request struct TerminateThreadsRequest
     threadIds::Union{Missing,Vector{Int64}} = missing
 end
 
-@response struct TerminateThreads end
+@response struct TerminateThreadsResponse end
 
-@request struct Threads end
+@request struct ThreadsRequest end
 
-@response struct Threads
+@response struct ThreadsResponse
     threads::Vector{Thread} = Thread[]
 end
 
-@request struct Variables
+@request struct VariablesRequest
     variablesReference::Int64
     filter::Union{Missing,VariablesFilter} = missing
     start::Union{Missing,Int64} = missing
@@ -543,6 +551,6 @@ end
     format::Union{Missing,ValueFormat} = missing
 end
 
-@response struct Variables
+@response struct VariablesResponse
     variables::Vector{Variable} = Variable[]
 end

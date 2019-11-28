@@ -1,6 +1,8 @@
 # *** event types ***
 
 @jsonable struct Event{T} <: ProtocolMessage
+    type::String = "event"
+    event::String
     seq::Int64
     body::Union{Missing,T} = missing
 end
@@ -37,7 +39,7 @@ protocol_message_type(::Type{Val{:event}}) = Event
 function Event(d::Dict)
     bodytype = event_body_type(Val{Symbol(d["event"])})
     body = bodytype(get(d, "body", Dict()))
-    Event{bodytype}(d["seq"], body)
+    Event{bodytype}("event", string(event_kind(bodytype)), d["seq"], body)
 end
 
 
@@ -58,10 +60,10 @@ becomes:
     event_kind(::Type{BlahEventBody}) = :blah
 =#
 macro event(structdefn, prs...)
-    corename = structdefn.args[2]
+    aliasname = structdefn.args[2] 
+    corename = Symbol(string(aliasname)[1:end-5])
     expr = QuoteNode(Symbol(lowercasefirst(string(corename))))
     bodyname = Symbol(string(corename)*"EventBody")
-    aliasname = Symbol(string(corename)*"Event")
     structdefn.args[2] = bodyname
     esc(quote
         @exported_jsonable $structdefn $(prs...)
@@ -76,37 +78,39 @@ end
 
 # *** concrete event types ***
 
-@event struct Breakpoint
+@event struct BreakpointEvent
     reason::String
     breakpoint::Breakpoint
 end
 
-@event struct Capabilities
+@event struct CapabilitiesEvent
     capabilities::Capabilities
 end
 
-@event struct Continued
+@event struct ContinuedEvent
     threadId::Int64
     allThreadsContinued::Union{Missing,Bool} = missing
 end
 
-@event struct Exited
+@event struct ExitedEvent
     exitCode::Int64
 end
 
-@event struct Initialized end
+@event struct InitializedEvent end
+struct InitializedEventBody end
+export InitializedEventBody
 
-@event struct LoadedSource
+@event struct LoadedSourceEvent
     reason::LoadedReason
     source::Source
 end
 
-@event struct Module
+@event struct ModuleEvent
     reason::LoadedReason
     mod::Module
 end :module => :mod
 
-@event struct Output
+@event struct OutputEvent
     category::Union{Missing,String} = missing
     output::String
     variablesReference::Union{Missing,Int64} = missing
@@ -116,7 +120,7 @@ end :module => :mod
     data::Any = missing
 end
 
-@event struct Process
+@event struct ProcessEvent
     name::String
     systemProcessId::Union{Missing,Int64} = missing
     isLocalProcess::Union{Missing,Bool} = missing
@@ -124,7 +128,7 @@ end
     pointerSize::Union{Missing,Int64} = missing
 end
 
-@event struct Stopped
+@event struct StoppedEvent
     reason::StoppedReason
     description::Union{Missing,String} = missing
     threadId::Union{Missing,Int64} = missing
@@ -133,11 +137,11 @@ end
     allThreadsStopped::Union{Missing,Bool} = missing
 end
 
-@event struct Terminated
+@event struct TerminatedEvent
     restart::Any = missing
 end
 
-@event struct Thread
+@event struct ThreadEvent
     reason::String
     threadId::Int64
 end

@@ -81,7 +81,7 @@ function set_break_points_request(conn, state::DebuggerState, params::SetBreakpo
     for bp in params.breakpoints
         @debug "Setting one breakpoint at line $(bp.line) with condition $(bp.condition) in file $file."
 
-        JuliaInterpreter.breakpoint(file, bp.line, bp.condition)
+        JuliaInterpreter.breakpoint(file, bp.line, bp.condition === missing ? nothing : bp.condition)
     end
 
     res = SetBreakpointsResponseArguments([Breakpoint(true) for i = 1:length(params.breakpoints)])
@@ -210,7 +210,7 @@ function stack_trace_request(conn, state::DebuggerState, params::StackTraceArgum
                 frames,
                 StackFrame(
                     id,
-                    meth_or_mod_name,
+                    string(meth_or_mod_name),
                     Source(
                         basename(file_name),
                         file_name,
@@ -353,9 +353,9 @@ function scopes_request(conn, state::DebuggerState, params::ScopesArguments)
     var_ref_id = length(state.varrefs)
 
     if isfile(file_name) && code_range !== nothing
-        return ScopesResponseArguments([Scope("Local", missing, var_ref_id, missing, missing, false, Source(basename(file_name), file_name, missing, missing, missing, missing, missing, missing), code_range.start, missing, code_range.stop, missing)])
+        return ScopesResponseArguments([Scope(name="Local", variablesReference=var_ref_id, expensive=false, source=Source(name=basename(file_name), path=file_name), line=code_range.start, endLine=code_range.stop)])
     else
-        return ScopesResponseArguments([Scope("Local", var_ref_id, false)])
+        return ScopesResponseArguments([Scope(name="Local", variablesReference=var_ref_id, expensive=false)])
     end
 end
 
@@ -369,7 +369,6 @@ end
 
 function construct_return_msg_for_var(state::DebuggerState, name, value)
     v_type = typeof(value)
-    v_type_as_string = string(v_type)
     v_value_as_string = Base.invokelatest(repr, value)
 
     if (isstructtype(v_type) || value isa AbstractArray || value isa AbstractDict) && !(value isa String || value isa Symbol)
@@ -394,28 +393,15 @@ function construct_return_msg_for_var(state::DebuggerState, name, value)
         end
 
         return Variable(
-            name,
-            v_value_as_string,
-            v_type_as_string,
-            missing,
-            missing,
-            new_var_id,
-            named_count,
-            indexed_count,
-            missing
+            name=name,
+            value=v_value_as_string,
+            type=string(v_type),
+            variablesReference=new_var_id,
+            namedVariables=named_count,
+            indexedVariables=indexed_count
         )
     else
-        return Variable(
-            name,
-            v_value_as_string,
-            v_type_as_string,
-            missing,
-            missing,
-            0,
-            0,
-            0,
-            missing
-        )
+        return Variable(name=name, value=v_value_as_string, type=string(v_type), variablesReference=0)
     end
 end
 
@@ -423,7 +409,7 @@ function construct_return_msg_for_var_with_undef_value(state::DebuggerState, nam
     v_type_as_string = ""
     v_value_encoded = Base64.base64encode("#undef")
 
-    return string("0;", name, ";", v_type_as_string, ";0;0;", v_value_encoded)
+    return Variable(name=name, type=v_type_as_string, value=v_value_encoded, variablesReference=0)
 end
 
 function get_keys_with_drop_take(value, skip_count, take_count)
@@ -446,18 +432,6 @@ function variables_request(conn, state::DebuggerState, params::VariablesArgument
     var_ref = state.varrefs[var_ref_id]
 
     variables = Variable[]
-
-    # struct Variable
-    #     name::String
-    #     value::String
-    #     type::Union{Nothing,String}
-    #     presentatonHint::Union{Nothing,VariablePresentationHint}
-    #     evaluateName::Union{Nothing,String}
-    #     variablesReference::Int
-    #     namedVariables::Union{Nothing,Int}
-    #     indexedVariables::Union{Nothing,Int}
-    #     memoryReference::Union{Nothing,String}
-    # end
 
     if var_ref.kind == :scope
         curr_fr = var_ref.value
@@ -520,7 +494,7 @@ function variables_request(conn, state::DebuggerState, params::VariablesArgument
                         val = Base.invokelatest(getindex, var_ref.value, i)
                         s = construct_return_msg_for_var(state, join(string.(i.I), ','), val)
                     catch err
-                        s = string("0;", join(string.(i.I), ','), ";;0;0;", Base64.base64encode("#error"))
+                        s = Variable(name=join(string.(i.I), ','), type="", value="#error", variablesReference=0)
                     end
                     push!(variables, s)
                 end
@@ -562,7 +536,7 @@ function variables_request(conn, state::DebuggerState, params::VariablesArgument
 
     end
 
-    return variables
+    return VariablesResponseArguments(variables)
 end
 
 function set_variable_request(conn, state::DebuggerState, params::SetVariableArguments)
@@ -639,7 +613,6 @@ function set_variable_request(conn, state::DebuggerState, params::SetVariableArg
     end
 end
 
-# TODO CHANGE TO NOTIFICATION
 function restart_frame_request(conn, state::DebuggerState, params::RestartFrameArguments)
     frame_id = params.frameId
 
@@ -668,7 +641,7 @@ function restart_frame_request(conn, state::DebuggerState, params::RestartFrameA
 
     put!(state.next_cmd, (cmd = :continue,))
 
-    return
+    return nothing # RestartFrameResponseResponseArguments()
 end
 
 function exception_info_request(conn, state::DebuggerState, params::ExceptionInfoArguments)
@@ -704,13 +677,12 @@ function evaluate_request(conn, state::DebuggerState, params::EvaluateArguments)
     end
 end
 
-# TODO Change to notification
 function continue_request(conn, state::DebuggerState, params::ContinueArguments)
     @debug "continue_request"
 
     put!(state.next_cmd, (cmd = :continue,))
 
-    return
+    return nothing # ContinueResponseArguments()
 end
 
 function next_request(conn, state::DebuggerState, params::NextArguments)
@@ -718,7 +690,7 @@ function next_request(conn, state::DebuggerState, params::NextArguments)
 
     put!(state.next_cmd, (cmd = :next,))
 
-    return
+    return nothing # NextResponseArguments()
 end
 
 function setp_in_request(conn, state::DebuggerState, params::StepInArguments)
@@ -726,7 +698,7 @@ function setp_in_request(conn, state::DebuggerState, params::StepInArguments)
 
     put!(state.next_cmd, (cmd = :stepIn,))
 
-    return
+    return nothing # StepInResponseArguments()
 end
 
 function setp_out_request(conn, state::DebuggerState, params::StepOutArguments)
@@ -734,7 +706,7 @@ function setp_out_request(conn, state::DebuggerState, params::StepOutArguments)
 
     put!(state.next_cmd, (cmd = :stepOut,))
 
-    return
+    return nothing # StepOutResponseArguments()
 end
 
 function disconnect_request(conn, state::DebuggerState, params::DisconnectArguments)
@@ -742,7 +714,7 @@ function disconnect_request(conn, state::DebuggerState, params::DisconnectArgume
 
     put!(state.next_cmd, (cmd = :stop,))
 
-    return
+    return nothing # DisconnectResponseArguments()
 end
 
 function terminate_request(conn, state::DebuggerState, params::TerminateArguments)
@@ -751,5 +723,5 @@ function terminate_request(conn, state::DebuggerState, params::TerminateArgument
     JSONRPC.send(conn, finished_notification_type, nothing)
     put!(state.next_cmd, (cmd = :stop,))
 
-    return
+    return nothing # TerminateResponseArguments()
 end

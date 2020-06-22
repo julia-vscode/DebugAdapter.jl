@@ -120,11 +120,6 @@ end
     endColum::Union{Missing,Int}
 end
 
-function Scope(name::String, reference::Int, expensive::Bool)
-    return Scope(name, missing, reference, missing, missing, expensive, missing, missing, missing, missing, missing)
-end
-
-
 @dict_readable struct VariablePresentationHint <: Outbound
     kind::Union{Missing,String}
     attributes::Union{Missing,Vector{String}}

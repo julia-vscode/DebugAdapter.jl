@@ -109,6 +109,8 @@ function set_exception_break_points_request(conn, state::DebuggerState, params::
     else
         state.compile_mode = JuliaInterpreter.finish_and_return!
     end
+
+    return SetExceptionBreakpointsResponseArguments(String[], missing)
 end
 
 function set_function_break_points_request(conn, state::DebuggerState, params::SetFunctionBreakpointsArguments)

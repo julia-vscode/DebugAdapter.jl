@@ -17,12 +17,12 @@ const restart_frame_request_type = JSONRPC.RequestType("restartFrame", RestartFr
 const set_variable_request_type = JSONRPC.RequestType("setVariable", SetVariableArguments, SetVariableResponseArguments)
 const stopped_notification_type = JSONRPC.NotificationType("stopped", StoppedEventArguments)
 
-struct DebugArguments
+@dict_readable struct DebugArguments <: Outbound
     stopOnEntry::Bool
     program::String
 end
 
-struct ExecArguments
+@dict_readable struct ExecArguments <: Outbound
     stopOnEntry::Bool
     code::String
 end

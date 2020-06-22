@@ -79,6 +79,7 @@ function startdebug(pipename)
             end
         catch err
             # TODO Add crash reporting
+            Base.display_error(err, catch_backtrace())
         end
 
         while true
@@ -91,7 +92,7 @@ function startdebug(pipename)
                     Base.display_error(stderr, err, catch_backtrace())
                 end
 
-                JSONRPC.send(conn, finished_notification_type, nothing)
+                JSONRPC.send(endpoint, finished_notification_type, nothing)
                 break
             elseif msg.cmd == :stop
                 break
@@ -107,10 +108,10 @@ function startdebug(pipename)
                 end
 
                 if ret === nothing
-                    JSONRPC.send(conn, finished_notification_type, nothing)
+                    JSONRPC.send(endpoint, finished_notification_type, nothing)
                     state.debug_mode == :launch && return :break
                 else
-                    send_stopped_msg(conn, ret, state)
+                    send_stopped_msg(endpoint, ret, state)
                 end
             end
         end

@@ -109,7 +109,7 @@ end
 @dict_readable struct Scope <: Outbound
     name::String
     presentationHint::Union{Missing,String}
-    variablesReference:Int
+    variablesReference::Int
     namedVariables::Union{Missing,Int}
     indexedVariables::Union{Missing,Int}
     expensive::Bool

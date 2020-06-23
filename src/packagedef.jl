@@ -30,7 +30,7 @@ function clean_up_ARGS_in_launch_mode()
     return pipename, crashreporting_pipename
 end
 
-function startdebug(socket, error_handler=nothing)
+function startdebug(socket, error_handler = nothing)
     @debug "Connected to debug adapter."
 
     try

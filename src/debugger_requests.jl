@@ -262,7 +262,7 @@ function stack_trace_request(conn, state::DebuggerState, params::StackTraceArgum
             else
                 src = curr_fr.framecode.src
                 src = JuliaInterpreter.copy_codeinfo(src)
-                JuliaInterpreter.replace_coretypes!(src; rev=true)
+                JuliaInterpreter.replace_coretypes!(src; rev = true)
                 code = Base.invokelatest(JuliaInterpreter.framecode_lines, src)
 
                 state.sources[state.next_source_id] = join(code, '\n')
@@ -353,9 +353,9 @@ function scopes_request(conn, state::DebuggerState, params::ScopesArguments)
     var_ref_id = length(state.varrefs)
 
     if isfile(file_name) && code_range !== nothing
-        return ScopesResponseArguments([Scope(name="Local", variablesReference=var_ref_id, expensive=false, source=Source(name=basename(file_name), path=file_name), line=code_range.start, endLine=code_range.stop)])
+        return ScopesResponseArguments([Scope(name = "Local", variablesReference = var_ref_id, expensive = false, source = Source(name = basename(file_name), path = file_name), line = code_range.start, endLine = code_range.stop)])
     else
-        return ScopesResponseArguments([Scope(name="Local", variablesReference=var_ref_id, expensive=false)])
+        return ScopesResponseArguments([Scope(name = "Local", variablesReference = var_ref_id, expensive = false)])
     end
 end
 
@@ -393,22 +393,22 @@ function construct_return_msg_for_var(state::DebuggerState, name, value)
         end
 
         return Variable(
-            name=name,
-            value=v_value_as_string,
-            type=string(v_type),
-            variablesReference=new_var_id,
-            namedVariables=named_count,
-            indexedVariables=indexed_count
+            name = name,
+            value = v_value_as_string,
+            type = string(v_type),
+            variablesReference = new_var_id,
+            namedVariables = named_count,
+            indexedVariables = indexed_count
         )
     else
-        return Variable(name=name, value=v_value_as_string, type=string(v_type), variablesReference=0)
+        return Variable(name = name, value = v_value_as_string, type = string(v_type), variablesReference = 0)
     end
 end
 
 function construct_return_msg_for_var_with_undef_value(state::DebuggerState, name)
     v_type_as_string = ""
 
-    return Variable(name=name, type=v_type_as_string, value="#undef", variablesReference=0)
+    return Variable(name = name, type = v_type_as_string, value = "#undef", variablesReference = 0)
 end
 
 function get_keys_with_drop_take(value, skip_count, take_count)
@@ -493,7 +493,7 @@ function variables_request(conn, state::DebuggerState, params::VariablesArgument
                         val = Base.invokelatest(getindex, var_ref.value, i)
                         s = construct_return_msg_for_var(state, join(string.(i.I), ','), val)
                     catch err
-                        s = Variable(name=join(string.(i.I), ','), type="", value="#error", variablesReference=0)
+                        s = Variable(name = join(string.(i.I), ','), type = "", value = "#error", variablesReference = 0)
                     end
                     push!(variables, s)
                 end
@@ -726,7 +726,7 @@ function terminate_request(conn, state::DebuggerState, params::TerminateArgument
 end
 
 function threads_request(conn, state::DebuggerState, params::Nothing)
-    return ThreadsResponseArguments([Thread(id=1, name="Main Thread")])
+    return ThreadsResponseArguments([Thread(id = 1, name = "Main Thread")])
 end
 
 function breakpointlocations_request(conn, state::DebuggerState, params::BreakpointLocationsArguments)

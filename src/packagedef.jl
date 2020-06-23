@@ -113,6 +113,13 @@ function startdebug(socket, error_handler=nothing)
                     end
                 end
             end
+
+            # Wait until we have sent any response to currently handled
+            # messages before we shutdown
+            while is_currently_handling_msg(msg_dispatcher)
+                yield()
+            end
+
             @debug "Finished debugging"
         finally
             close(endpoint)

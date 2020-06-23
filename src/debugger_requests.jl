@@ -407,9 +407,8 @@ end
 
 function construct_return_msg_for_var_with_undef_value(state::DebuggerState, name)
     v_type_as_string = ""
-    v_value_encoded = Base64.base64encode("#undef")
 
-    return Variable(name=name, type=v_type_as_string, value=v_value_encoded, variablesReference=0)
+    return Variable(name=name, type=v_type_as_string, value="#undef", variablesReference=0)
 end
 
 function get_keys_with_drop_take(value, skip_count, take_count)

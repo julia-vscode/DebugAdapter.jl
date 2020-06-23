@@ -238,7 +238,7 @@ function stack_trace_request(conn, state::DebuggerState, params::StackTraceArgum
                     frames,
                     StackFrame(
                         id,
-                        meth_or_mod_name,
+                        string(meth_or_mod_name),
                         Source(
                             file_name,
                             missing,
@@ -271,7 +271,7 @@ function stack_trace_request(conn, state::DebuggerState, params::StackTraceArgum
                     frames,
                     StackFrame(
                         id,
-                        meth_or_mod_name,
+                        string(meth_or_mod_name),
                         Source(
                             file_name,
                             missing,
@@ -301,7 +301,7 @@ function stack_trace_request(conn, state::DebuggerState, params::StackTraceArgum
                     frames,
                     StackFrame(
                         id,
-                        meth_or_mod_name,
+                        string(meth_or_mod_name),
                         Source(
                             "REPL",
                             missing,
@@ -724,4 +724,12 @@ function terminate_request(conn, state::DebuggerState, params::TerminateArgument
     put!(state.next_cmd, (cmd = :stop,))
 
     return nothing # TerminateResponseArguments()
+end
+
+function threads_request(conn, state::DebuggerState, params::Nothing)
+    return ThreadsResponseArguments([Thread(id=1, name="Main Thread")])
+end
+
+function breakpointlocations_request(conn, state::DebuggerState, params::BreakpointLocationsArguments)
+    return BreakpointLocationsResponseArguments(BreakpointLocation[])
 end

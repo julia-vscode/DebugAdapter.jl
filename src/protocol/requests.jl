@@ -198,3 +198,15 @@ end
     instructionCount::Int
     resolveSymbols::Union{Missing,Bool}
 end
+
+@dict_readable struct BreakpointLocationsArguments <: Outbound
+    source::Source
+    line::Int
+    column::Union{Missing,Int}
+    endLine::Union{Missing,Int}
+    endColumn::Union{Missing,Int}
+end
+
+@dict_readable struct BreakpointLocationsResponseArguments <: Outbound
+    breakpoints::Vector{BreakpointLocation}
+end

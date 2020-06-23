@@ -260,3 +260,10 @@ end
     endLine::Union{Missing,Int}
     endColumn::Union{Missing,Int}
 end
+
+@dict_readable struct BreakpointLocation <: Outbound
+    line::Int
+    column::Union{Missing,Int}
+    endLine::Union{Missing,Int}
+    endColumn::Union{Missing,Int}
+end

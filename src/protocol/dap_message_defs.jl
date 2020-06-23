@@ -16,6 +16,8 @@ const exception_info_request_type = JSONRPC.RequestType("exceptionInfo", Excepti
 const restart_frame_request_type = JSONRPC.RequestType("restartFrame", RestartFrameArguments, RestartFrameResponseResponseArguments)
 const set_variable_request_type = JSONRPC.RequestType("setVariable", SetVariableArguments, SetVariableResponseArguments)
 const stopped_notification_type = JSONRPC.NotificationType("stopped", StoppedEventArguments)
+const threads_request_type = JSONRPC.RequestType("threads", Nothing, ThreadsResponseArguments)
+const breakpointslocation_request_type = JSONRPC.RequestType("breakpointLocations", BreakpointLocationsArguments, BreakpointLocationsResponseArguments)
 
 @dict_readable struct DebugArguments <: Outbound
     stopOnEntry::Bool

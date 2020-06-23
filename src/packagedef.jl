@@ -1,6 +1,4 @@
 
-include("../../../error_handler.jl")
-
 include("../../VSCodeServer/src/repl.jl")
 
 import Sockets, Base64
@@ -32,87 +30,98 @@ function clean_up_ARGS_in_launch_mode()
     return pipename, crashreporting_pipename
 end
 
-function startdebug(socket)
+function startdebug(socket, error_handler=nothing)
     @debug "Connected to debug adapter."
-
-    endpoint = JSONRPC.JSONRPCEndpoint(socket, socket) # TODO What about err_handler here?
 
     try
 
-        run(endpoint)
+        endpoint = JSONRPC.JSONRPCEndpoint(socket, socket, error_handler)
 
-        state = DebuggerState()
+        try
 
-        msg_dispatcher = JSONRPC.MsgDispatcher()
-        msg_dispatcher[disconnect_request_type] = (conn, params)->disconnect_request(conn, state, params)
-        msg_dispatcher[run_notification_type] = (conn, params)->run_notification(conn, state, params)
-        msg_dispatcher[debug_notification_type] = (conn, params)->debug_notification(conn, state, params)
+            run(endpoint)
 
-        msg_dispatcher[exec_notification_type] = (conn, params)->exec_notification(conn, state, params)
-        msg_dispatcher[set_break_points_request_type] = (conn, params)->set_break_points_request(conn, state, params)
-        msg_dispatcher[set_exception_break_points_request_type] = (conn, params)->set_exception_break_points_request(conn, state, params)
-        msg_dispatcher[set_function_exception_break_points_request_type] = (conn, params)->set_function_break_points_request(conn, state, params)
-        msg_dispatcher[stack_trace_request_type] = (conn, params)->stack_trace_request(conn, state, params)
-        msg_dispatcher[scopes_request_type] = (conn, params)->scopes_request(conn, state, params)
-        msg_dispatcher[source_request_type] = (conn, params)->source_request(conn, state, params)
-        msg_dispatcher[variables_request_type] = (conn, params)->variables_request(conn, state, params)
-        msg_dispatcher[continue_request_type] = (conn, params)->continue_request(conn, state, params)
-        msg_dispatcher[next_request_type] = (conn, params)->next_request(conn, state, params)
-        msg_dispatcher[step_in_request_type] = (conn, params)->setp_in_request(conn, state, params)
-        msg_dispatcher[step_out_request_type] = (conn, params)->setp_out_request(conn, state, params)
-        msg_dispatcher[evaluate_request_type] = (conn, params)->evaluate_request(conn, state, params)
-        msg_dispatcher[terminate_request_type] = (conn, params)->terminate_request(conn, state, params)
-        msg_dispatcher[exception_info_request_type] = (conn, params)->exception_info_request(conn, state, params)
-        msg_dispatcher[restart_frame_request_type] = (conn, params)->restart_frame_request(conn, state, params)
-        msg_dispatcher[set_variable_request_type] = (conn, params)->set_variable_request(conn, state, params)
-        msg_dispatcher[threads_request_type] = (conn, params)->threads_request(conn, state, params)
-        msg_dispatcher[breakpointslocation_request_type] = (conn, params)->breakpointlocations_request(conn, state, params)
+            state = DebuggerState()
 
-        @async try
-            for msg in endpoint
-                JSONRPC.dispatch_msg(endpoint, msg_dispatcher, msg)
-            end
-        catch err
-            @info "WE have on error here" err
-                # TODO Add crash reporting
-            Base.display_error(err, catch_backtrace())
-        end
+            msg_dispatcher = JSONRPC.MsgDispatcher()
+            msg_dispatcher[disconnect_request_type] = (conn, params)->disconnect_request(conn, state, params)
+            msg_dispatcher[run_notification_type] = (conn, params)->run_notification(conn, state, params)
+            msg_dispatcher[debug_notification_type] = (conn, params)->debug_notification(conn, state, params)
 
-        while true
-            msg = take!(state.next_cmd)
+            msg_dispatcher[exec_notification_type] = (conn, params)->exec_notification(conn, state, params)
+            msg_dispatcher[set_break_points_request_type] = (conn, params)->set_break_points_request(conn, state, params)
+            msg_dispatcher[set_exception_break_points_request_type] = (conn, params)->set_exception_break_points_request(conn, state, params)
+            msg_dispatcher[set_function_exception_break_points_request_type] = (conn, params)->set_function_break_points_request(conn, state, params)
+            msg_dispatcher[stack_trace_request_type] = (conn, params)->stack_trace_request(conn, state, params)
+            msg_dispatcher[scopes_request_type] = (conn, params)->scopes_request(conn, state, params)
+            msg_dispatcher[source_request_type] = (conn, params)->source_request(conn, state, params)
+            msg_dispatcher[variables_request_type] = (conn, params)->variables_request(conn, state, params)
+            msg_dispatcher[continue_request_type] = (conn, params)->continue_request(conn, state, params)
+            msg_dispatcher[next_request_type] = (conn, params)->next_request(conn, state, params)
+            msg_dispatcher[step_in_request_type] = (conn, params)->setp_in_request(conn, state, params)
+            msg_dispatcher[step_out_request_type] = (conn, params)->setp_out_request(conn, state, params)
+            msg_dispatcher[evaluate_request_type] = (conn, params)->evaluate_request(conn, state, params)
+            msg_dispatcher[terminate_request_type] = (conn, params)->terminate_request(conn, state, params)
+            msg_dispatcher[exception_info_request_type] = (conn, params)->exception_info_request(conn, state, params)
+            msg_dispatcher[restart_frame_request_type] = (conn, params)->restart_frame_request(conn, state, params)
+            msg_dispatcher[set_variable_request_type] = (conn, params)->set_variable_request(conn, state, params)
+            msg_dispatcher[threads_request_type] = (conn, params)->threads_request(conn, state, params)
+            msg_dispatcher[breakpointslocation_request_type] = (conn, params)->breakpointlocations_request(conn, state, params)
 
-            if msg.cmd == :run
-                try
-                    include(msg.program)
-                catch err
-                    Base.display_error(stderr, err, catch_backtrace())
+            @async try
+                for msg in endpoint
+                    JSONRPC.dispatch_msg(endpoint, msg_dispatcher, msg)
                 end
-
-                JSONRPC.send(endpoint, finished_notification_type, nothing)
-                break
-            elseif msg.cmd == :stop
-                break
-            else
-                ret = if msg.cmd == :continue
-                    our_debug_command(:c, state)
-                elseif msg.cmd == :next
-                    our_debug_command(:n, state)
-                elseif msg.cmd == :stepIn
-                    our_debug_command(:s, state)
-                elseif msg.cmd == :stepOut
-                    our_debug_command(:finish, state)
-                end
-
-                if ret === nothing
-                    JSONRPC.send(endpoint, finished_notification_type, nothing)
-                    state.debug_mode == :launch && break
+            catch err
+                if error_handler === nothing
+                    Base.display_error(err, catch_backtrace())
                 else
-                    send_stopped_msg(endpoint, ret, state)
+                    error_handler(err, Base.catch_backtrace())
                 end
             end
+
+            while true
+                msg = take!(state.next_cmd)
+
+                if msg.cmd == :run
+                    try
+                        include(msg.program)
+                    catch err
+                        Base.display_error(stderr, err, catch_backtrace())
+                    end
+
+                    JSONRPC.send(endpoint, finished_notification_type, nothing)
+                    break
+                elseif msg.cmd == :stop
+                    break
+                else
+                    ret = if msg.cmd == :continue
+                        our_debug_command(:c, state)
+                    elseif msg.cmd == :next
+                        our_debug_command(:n, state)
+                    elseif msg.cmd == :stepIn
+                        our_debug_command(:s, state)
+                    elseif msg.cmd == :stepOut
+                        our_debug_command(:finish, state)
+                    end
+
+                    if ret === nothing
+                        JSONRPC.send(endpoint, finished_notification_type, nothing)
+                        state.debug_mode == :launch && break
+                    else
+                        send_stopped_msg(endpoint, ret, state)
+                    end
+                end
+            end
+            @debug "Finished debugging"
+        finally
+            close(endpoint)
         end
-        @debug "Finished debugging"
-    finally
-        close(endpoint)
+    catch err
+        if error_handler === nothing
+            rethrow(err)
+        else
+            error_handler(err, Base.catch_backtrace())
+        end
     end
 end

@@ -115,7 +115,6 @@ function startdebug(socket, error_handler=nothing)
             end
             @debug "Finished debugging"
         finally
-            flush(endpoint)
             close(endpoint)
         end
     catch err

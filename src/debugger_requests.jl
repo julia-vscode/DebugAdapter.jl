@@ -145,7 +145,7 @@ function set_function_break_points_request(conn, state::DebuggerState, params::S
                         end
                         if all_args_are_legit
 
-                            return (mod = Main, name = parsed_name.args[1], signature = map(j -> j.args[1], parsed_name.args[2:end]), condition = parsed_condition)
+                            return (mod = Main, name = parsed_name.args[1], signature = map(j->j.args[1], parsed_name.args[2:end]), condition = parsed_condition)
                         else
                             return (mod = Main, name = parsed_name.args[1], signature = nothing, condition = parsed_condition)
                         end
@@ -165,7 +165,7 @@ function set_function_break_points_request(conn, state::DebuggerState, params::S
         return nothing
     end
 
-    bps = filter(i -> i !== nothing, bps)
+    bps = filter(i->i !== nothing, bps)
 
     for bp in JuliaInterpreter.breakpoints()
         if bp isa JuliaInterpreter.BreakpointSignature

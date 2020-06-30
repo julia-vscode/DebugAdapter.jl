@@ -145,7 +145,7 @@ function set_function_break_points_request(conn, state::DebuggerState, params::S
                         end
                         if all_args_are_legit
 
-                            return (mod = Main, name = parsed_name.args[1], signature = map(j->j.args[1], parsed_name.args[2:end]), condition = parsed_condition)
+                            return (mod = Main, name = parsed_name.args[1], signature = map(j -> j.args[1], parsed_name.args[2:end]), condition = parsed_condition)
                         else
                             return (mod = Main, name = parsed_name.args[1], signature = nothing, condition = parsed_condition)
                         end
@@ -165,7 +165,7 @@ function set_function_break_points_request(conn, state::DebuggerState, params::S
         return nothing
     end
 
-    bps = filter(i->i !== nothing, bps)
+    bps = filter(i -> i !== nothing, bps)
 
     for bp in JuliaInterpreter.breakpoints()
         if bp isa JuliaInterpreter.BreakpointSignature
@@ -695,9 +695,19 @@ end
 function setp_in_request(conn, state::DebuggerState, params::StepInArguments)
     @debug "stepin_request"
 
-    put!(state.next_cmd, (cmd = :stepIn,))
+    put!(state.next_cmd, (cmd = :stepIn, targetId = params.targetId))
 
     return nothing # StepInResponseArguments()
+end
+
+function step_in_targets_request(conn, state::DebuggerState, params::StepInTargetsArguments)
+    @debug "stepin_targets_request"
+
+    targets = calls_on_line(state)
+
+    return StepInTargetsResponseArguments([
+        StepInTarget(pc, string(expr)) for (pc, expr) in targets
+    ])
 end
 
 function setp_out_request(conn, state::DebuggerState, params::StepOutArguments)

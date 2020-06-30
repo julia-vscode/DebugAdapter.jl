@@ -9,6 +9,7 @@ const variables_request_type = JSONRPC.RequestType("variables", VariablesArgumen
 const continue_request_type = JSONRPC.RequestType("continue", ContinueArguments, ContinueResponseArguments)
 const next_request_type = JSONRPC.RequestType("next", NextArguments, NextResponseArguments)
 const step_in_request_type = JSONRPC.RequestType("stepIn", StepInArguments, StepInResponseArguments)
+const step_in_targets_request_type = JSONRPC.RequestType("stepInTargets", StepInTargetsArguments, StepInTargetsResponseArguments)
 const step_out_request_type = JSONRPC.RequestType("stepOut", StepOutArguments, StepOutResponseArguments)
 const evaluate_request_type = JSONRPC.RequestType("evaluate", EvaluateArguments, EvaluateResponseArguments)
 const terminate_request_type = JSONRPC.RequestType("terminate", TerminateArguments, TerminateResponseArguments)

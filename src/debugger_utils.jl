@@ -18,10 +18,7 @@ maybe_quote(x) = (isa(x, Expr) || isa(x, Symbol)) ? QuoteNode(x) : x
 
 # all calls in the current frame and the same "line"
 calls_on_line(state, args...) = calls_on_line(state.frame, args...)
-function calls_on_line(::Nothing, args...)
-    @warn "no frames were given"
-    []
-end
+calls_on_line(::Nothing, args...) = []
 function calls_on_line(frame::JuliaInterpreter.Frame, line = nothing)
     if line === nothing
         loc = JuliaInterpreter.whereis(frame)
@@ -62,7 +59,7 @@ function prettify_expr(expr)
     if Meta.isexpr(expr, :call)
         fname = expr.args[1]
 
-        if Base.isoperator(fname)
+        if Base.isoperator(Symbol(fname))
             join(string.(expr.args[2:end]), " $(fname) ")
         else
             string(fname, '(', join(expr.args[2:end], ", "), ')')
@@ -74,10 +71,7 @@ end
 
 # all calls in the current frame after (and including) the current pc
 calls_in_frame(state) = calls_in_frame(state.frame)
-function calls_in_frame(::Nothing)
-    @warn "no frames were given"
-    []
-end
+calls_in_frame(::Nothing) = []
 function calls_in_frame(frame::JuliaInterpreter.Frame)
     exprs = []
     for pc in frame.pc:length(frame.framecode.src.codelocs)

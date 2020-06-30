@@ -104,13 +104,9 @@ function startdebug(socket, error_handler = nothing)
                         if msg.targetId === missing
                             our_debug_command(:s, state)
                         else
-                            @show msg.targetId
                             while state.frame.pc < msg.targetId
                                 our_debug_command(:nc, state)
                             end
-
-                            @show state.frame
-                            @show state.frame.pc
 
                             our_debug_command(:s, state)
                         end

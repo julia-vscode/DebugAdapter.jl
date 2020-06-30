@@ -703,12 +703,7 @@ end
 function step_in_targets_request(conn, state::DebuggerState, params::StepInTargetsArguments)
     @debug "stepin_targets_request"
 
-    targets = []
-    try
-        targets = calls_on_line(state)
-    catch err
-        @error exception = err, catch_backtrace()
-    end
+    targets = calls_on_line(state)
 
     return StepInTargetsResponseArguments([
         StepInTarget(pc, string(expr)) for (pc, expr) in targets

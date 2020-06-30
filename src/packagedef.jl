@@ -99,7 +99,7 @@ function startdebug(socket, error_handler = nothing)
                     ret = if msg.cmd == :continue
                         our_debug_command(:c, state)
                     elseif msg.cmd == :next
-                        our_debug_command(:nc, state)
+                        our_debug_command(:n, state)
                     elseif msg.cmd == :stepIn
                         if msg.targetId === missing
                             our_debug_command(:s, state)

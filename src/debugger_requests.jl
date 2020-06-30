@@ -424,9 +424,9 @@ function variables_request(conn, state::DebuggerState, params::VariablesArgument
 
     var_ref_id = params.variablesReference
 
-    filter_type = something(params.filter, "")
-    skip_count = something(params.start, 0)
-    take_count = something(params.count, typemax(Int))
+    filter_type = coalesce(params.filter, "")
+    skip_count = coalesce(params.start, 0)
+    take_count = coalesce(params.count, typemax(Int))
 
     var_ref = state.varrefs[var_ref_id]
 

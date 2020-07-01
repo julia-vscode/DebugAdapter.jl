@@ -428,6 +428,21 @@ function get_cartesian_with_drop_take(value, skip_count, take_count)
     collect(Iterators.take(Iterators.drop(CartesianIndices(value), skip_count), take_count))
 end
 
+function push_module_names!(variables, state, mod)
+    for n in names(mod, all = true)
+        !isdefined(mod, n) && continue
+        Base.isdeprecated(mod, n) && continue
+
+        x = getfield(mod, n)
+        x === Main && continue
+
+        s = string(n)
+        startswith(s, "#") && continue
+
+        push!(variables, construct_return_msg_for_var(state, s, x))
+    end
+end
+
 function variables_request(conn, state::DebuggerState, params::VariablesArguments)
     @debug "getvariables_request"
 
@@ -459,27 +474,7 @@ function variables_request(conn, state::DebuggerState, params::VariablesArgument
             push!(variables, construct_return_msg_for_var(state, "Return Value", ret_val))
         end
     elseif var_ref.kind == :module
-        mod = var_ref.value
-
-        for n in names(mod, all = true)
-            !isdefined(mod, n) && continue
-            Base.isdeprecated(mod, n) && continue
-
-            x = getfield(mod, n)
-            x === Main && continue
-
-            s = string(n)
-            startswith(s, "#") && continue
-
-            val_as_string = Base.invokelatest(repr, x)
-
-            push!(variables, Variable(
-                name = s,
-                value = val_as_string,
-                type = repr(typeof(x)),
-                variablesReference = 0
-            ))
-        end
+        push_module_names!(variables, state, var_ref.value)
     elseif var_ref.kind == :var
         container_type = typeof(var_ref.value)
 
@@ -501,6 +496,8 @@ function variables_request(conn, state::DebuggerState, params::VariablesArgument
                     0,
                     missing
                 ))
+            elseif var_ref.value isa Base.Module
+                push_module_names!(variables, state, var_ref.value)
             else
                 for i = Iterators.take(Iterators.drop(1:fieldcount(container_type), skip_count), take_count)
                     s = isdefined(var_ref.value, i) ?

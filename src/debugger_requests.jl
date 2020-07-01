@@ -145,7 +145,7 @@ function set_function_break_points_request(conn, state::DebuggerState, params::S
                         end
                         if all_args_are_legit
 
-                            return (mod = Main, name = parsed_name.args[1], signature = map(j->j.args[1], parsed_name.args[2:end]), condition = parsed_condition)
+                            return (mod = Main, name = parsed_name.args[1], signature = map(j -> j.args[1], parsed_name.args[2:end]), condition = parsed_condition)
                         else
                             return (mod = Main, name = parsed_name.args[1], signature = nothing, condition = parsed_condition)
                         end
@@ -165,7 +165,7 @@ function set_function_break_points_request(conn, state::DebuggerState, params::S
         return nothing
     end
 
-    bps = filter(i->i !== nothing, bps)
+    bps = filter(i -> i !== nothing, bps)
 
     for bp in JuliaInterpreter.breakpoints()
         if bp isa JuliaInterpreter.BreakpointSignature
@@ -352,11 +352,20 @@ function scopes_request(conn, state::DebuggerState, params::ScopesArguments)
 
     var_ref_id = length(state.varrefs)
 
+    scopes = []
+
     if isfile(file_name) && code_range !== nothing
-        return ScopesResponseArguments([Scope(name = "Local", variablesReference = var_ref_id, expensive = false, source = Source(name = basename(file_name), path = file_name), line = code_range.start, endLine = code_range.stop)])
+        push!(scopes, Scope(name = "Local", variablesReference = var_ref_id, expensive = false, source = Source(name = basename(file_name), path = file_name), line = code_range.start, endLine = code_range.stop))
     else
-        return ScopesResponseArguments([Scope(name = "Local", variablesReference = var_ref_id, expensive = false)])
+        push!(scopes, Scope(name = "Local", variablesReference = var_ref_id, expensive = false))
     end
+
+    curr_mod = JuliaInterpreter.moduleof(curr_fr)
+    push!(state.varrefs, VariableReference(:module, curr_mod))
+
+    push!(scopes, Scope(name = "Global ($(curr_mod))", variablesReference = length(state.varrefs), expensive = true))
+
+    return ScopesResponseArguments(scopes)
 end
 
 function source_request(conn, state::DebuggerState, params::SourceArguments)
@@ -448,6 +457,28 @@ function variables_request(conn, state::DebuggerState, params::VariablesArgument
         if JuliaInterpreter.isexpr(JuliaInterpreter.pc_expr(curr_fr), :return)
             ret_val = JuliaInterpreter.get_return(curr_fr)
             push!(variables, construct_return_msg_for_var(state, "Return Value", ret_val))
+        end
+    elseif var_ref.kind == :module
+        mod = var_ref.value
+
+        for n in names(mod, all = true)
+            !isdefined(mod, n) && continue
+            Base.isdeprecated(mod, n) && continue
+
+            x = getfield(mod, n)
+            x === Main && continue
+
+            s = string(n)
+            startswith(s, "#") && continue
+
+            val_as_string = Base.invokelatest(repr, x)
+
+            push!(variables, Variable(
+                name = s,
+                value = val_as_string,
+                type = repr(typeof(x)),
+                variablesReference = 0
+            ))
         end
     elseif var_ref.kind == :var
         container_type = typeof(var_ref.value)

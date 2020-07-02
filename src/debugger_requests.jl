@@ -428,6 +428,23 @@ function get_cartesian_with_drop_take(value, skip_count, take_count)
     collect(Iterators.take(Iterators.drop(CartesianIndices(value), skip_count), take_count))
 end
 
+function collect_global_refs(ci::Core.CodeInfo, refs = Set([]))
+    for expr in ci.code
+        collect_global_refs(expr, refs)
+    end
+    refs
+end
+
+function collect_global_refs(expr::Expr, refs = Set([]))
+    for arg in expr.args
+        collect_global_refs(arg, refs)
+    end
+    refs
+end
+
+collect_global_refs(expr, refs) = nothing
+collect_global_refs(expr::GlobalRef, refs) = push!(refs, expr)
+
 function push_module_names!(variables, state, mod)
     for n in names(mod, all = true)
         !isdefined(mod, n) && continue
@@ -466,6 +483,14 @@ function variables_request(conn, state::DebuggerState, params::VariablesArgument
             # For now we don't report it to the client
             if !startswith(string(v.name), "#") && string(v.name) != ""
                 push!(variables, construct_return_msg_for_var(state, string(v.name), v.value))
+            end
+        end
+
+        globals = collect_global_refs(curr_fr.framecode.src)
+
+        for g in globals
+            if isdefined(g.mod, g.name)
+                push!(variables, construct_return_msg_for_var(state, string(g.mod, ".", g.name), getfield(g.mod, g.name)))
             end
         end
 

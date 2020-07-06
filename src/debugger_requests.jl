@@ -519,7 +519,7 @@ function variables_request(conn, state::DebuggerState, params::VariablesArgument
 
         for g in globals
             if isdefined(g.mod, g.name)
-                push!(variables, construct_return_msg_for_var(state, string(g.mod, ".", g.name), getfield(g.mod, g.name)))
+                push!(variables, construct_return_msg_for_var(state, string(g.name), getfield(g.mod, g.name)))
             end
         end
     elseif var_ref.kind == :module
@@ -684,6 +684,23 @@ function set_variable_request(conn, state::DebuggerState, params::SetVariableArg
                 end
             end
         end
+    elseif var_ref.kind == :scope_globals || var_ref.kind == :module
+        mod = if var_ref.value isa JuliaInterpreter.Frame
+            JuliaInterpreter.moduleof(var_ref.value)
+        elseif var_ref.value isa Base.Module
+            var_ref.value
+        else
+            return JSONRPC.JSONRPCError(-32600, "No module attached to this global variable.", nothing)
+        end
+
+        new_val = try
+            mod.eval(Meta.parse("$var_name = $var_value"))
+        catch err
+            return JSONRPC.JSONRPCError(-32600, "Something went wrong in the set: $err", nothing)
+        end
+        s = construct_return_msg_for_var(state::DebuggerState, "", new_val)
+
+        return SetVariableResponseArguments(s.value, s.type, s.variablesReference, s.namedVariables, s.indexedVariables)
     else
         error("Unknown var ref type.")
     end

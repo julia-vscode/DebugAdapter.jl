@@ -349,15 +349,19 @@ function scopes_request(conn, state::DebuggerState, params::ScopesArguments)
     code_range = curr_scopeof isa Method ? JuliaInterpreter.compute_corrected_linerange(curr_scopeof) : nothing
 
     push!(state.varrefs, VariableReference(:scope, curr_fr))
+    local_var_ref_id = length(state.varrefs)
 
-    var_ref_id = length(state.varrefs)
+    push!(state.varrefs, VariableReference(:scope_globals, curr_fr))
+    global_var_ref_id = length(state.varrefs)
 
     scopes = []
 
     if isfile(file_name) && code_range !== nothing
-        push!(scopes, Scope(name = "Local", variablesReference = var_ref_id, expensive = false, source = Source(name = basename(file_name), path = file_name), line = code_range.start, endLine = code_range.stop))
+        push!(scopes, Scope(name = "Local", variablesReference = local_var_ref_id, expensive = false, source = Source(name = basename(file_name), path = file_name), line = code_range.start, endLine = code_range.stop))
+        push!(scopes, Scope(name = "Global", variablesReference = global_var_ref_id, expensive = false, source = Source(name = basename(file_name), path = file_name), line = code_range.start, endLine = code_range.stop))
     else
-        push!(scopes, Scope(name = "Local", variablesReference = var_ref_id, expensive = false))
+        push!(scopes, Scope(name = "Local", variablesReference = local_var_ref_id, expensive = false))
+        push!(scopes, Scope(name = "Global", variablesReference = global_var_ref_id, expensive = false))
     end
 
     curr_mod = JuliaInterpreter.moduleof(curr_fr)
@@ -428,6 +432,23 @@ function get_cartesian_with_drop_take(value, skip_count, take_count)
     collect(Iterators.take(Iterators.drop(CartesianIndices(value), skip_count), take_count))
 end
 
+function collect_global_refs(frame::JuliaInterpreter.Frame)
+    try
+        m = JuliaInterpreter.scopeof(frame)
+        m isa Method || return []
+
+        func = frame.framedata.locals[1].value
+        args = (m.sig.parameters[2:end]...,)
+
+        ci = code_typed(func, args, optimize = false)[1][1]
+
+        return collect_global_refs(ci)
+    catch err
+        @error err
+        []
+    end
+end
+
 function collect_global_refs(ci::Core.CodeInfo, refs = Set([]))
     for expr in ci.code
         collect_global_refs(expr, refs)
@@ -486,17 +507,18 @@ function variables_request(conn, state::DebuggerState, params::VariablesArgument
             end
         end
 
-        globals = collect_global_refs(curr_fr.framecode.src)
+        if JuliaInterpreter.isexpr(JuliaInterpreter.pc_expr(curr_fr), :return)
+            ret_val = JuliaInterpreter.get_return(curr_fr)
+            push!(variables, construct_return_msg_for_var(state, "Return Value", ret_val))
+        end
+    elseif var_ref.kind == :scope_globals
+        curr_fr = var_ref.value
+        globals = collect_global_refs(curr_fr)
 
         for g in globals
             if isdefined(g.mod, g.name)
                 push!(variables, construct_return_msg_for_var(state, string(g.mod, ".", g.name), getfield(g.mod, g.name)))
             end
-        end
-
-        if JuliaInterpreter.isexpr(JuliaInterpreter.pc_expr(curr_fr), :return)
-            ret_val = JuliaInterpreter.get_return(curr_fr)
-            push!(variables, construct_return_msg_for_var(state, "Return Value", ret_val))
         end
     elseif var_ref.kind == :module
         push_module_names!(variables, state, var_ref.value)

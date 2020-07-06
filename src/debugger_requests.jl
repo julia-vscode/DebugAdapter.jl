@@ -457,9 +457,11 @@ function collect_global_refs(ci::Core.CodeInfo, refs = Set([]))
 end
 
 function collect_global_refs(expr::Expr, refs = Set([]))
-    for arg in expr.args
+    args = Meta.isexpr(expr, :call) ? expr.args[2:end] : expr.args
+    for arg in args
         collect_global_refs(arg, refs)
     end
+
     refs
 end
 

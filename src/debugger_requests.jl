@@ -145,7 +145,7 @@ function set_function_break_points_request(conn, state::DebuggerState, params::S
                         end
                         if all_args_are_legit
 
-                            return (mod = Main, name = parsed_name.args[1], signature = map(j->j.args[1], parsed_name.args[2:end]), condition = parsed_condition)
+                            return (mod = Main, name = parsed_name.args[1], signature = map(j -> j.args[1], parsed_name.args[2:end]), condition = parsed_condition)
                         else
                             return (mod = Main, name = parsed_name.args[1], signature = nothing, condition = parsed_condition)
                         end
@@ -165,7 +165,7 @@ function set_function_break_points_request(conn, state::DebuggerState, params::S
         return nothing
     end
 
-    bps = filter(i->i !== nothing, bps)
+    bps = filter(i -> i !== nothing, bps)
 
     for bp in JuliaInterpreter.breakpoints()
         if bp isa JuliaInterpreter.BreakpointSignature
@@ -349,14 +349,27 @@ function scopes_request(conn, state::DebuggerState, params::ScopesArguments)
     code_range = curr_scopeof isa Method ? JuliaInterpreter.compute_corrected_linerange(curr_scopeof) : nothing
 
     push!(state.varrefs, VariableReference(:scope, curr_fr))
+    local_var_ref_id = length(state.varrefs)
 
-    var_ref_id = length(state.varrefs)
+    push!(state.varrefs, VariableReference(:scope_globals, curr_fr))
+    global_var_ref_id = length(state.varrefs)
+
+    scopes = []
 
     if isfile(file_name) && code_range !== nothing
-        return ScopesResponseArguments([Scope(name = "Local", variablesReference = var_ref_id, expensive = false, source = Source(name = basename(file_name), path = file_name), line = code_range.start, endLine = code_range.stop)])
+        push!(scopes, Scope(name = "Local", variablesReference = local_var_ref_id, expensive = false, source = Source(name = basename(file_name), path = file_name), line = code_range.start, endLine = code_range.stop))
+        push!(scopes, Scope(name = "Global", variablesReference = global_var_ref_id, expensive = false, source = Source(name = basename(file_name), path = file_name), line = code_range.start, endLine = code_range.stop))
     else
-        return ScopesResponseArguments([Scope(name = "Local", variablesReference = var_ref_id, expensive = false)])
+        push!(scopes, Scope(name = "Local", variablesReference = local_var_ref_id, expensive = false))
+        push!(scopes, Scope(name = "Global", variablesReference = global_var_ref_id, expensive = false))
     end
+
+    curr_mod = JuliaInterpreter.moduleof(curr_fr)
+    push!(state.varrefs, VariableReference(:module, curr_mod))
+
+    push!(scopes, Scope(name = "Global ($(curr_mod))", variablesReference = length(state.varrefs), expensive = true))
+
+    return ScopesResponseArguments(scopes)
 end
 
 function source_request(conn, state::DebuggerState, params::SourceArguments)
@@ -419,6 +432,57 @@ function get_cartesian_with_drop_take(value, skip_count, take_count)
     collect(Iterators.take(Iterators.drop(CartesianIndices(value), skip_count), take_count))
 end
 
+function collect_global_refs(frame::JuliaInterpreter.Frame)
+    try
+        m = JuliaInterpreter.scopeof(frame)
+        m isa Method || return []
+
+        func = frame.framedata.locals[1].value
+        args = (m.sig.parameters[2:end]...,)
+
+        ci = code_typed(func, args, optimize = false)[1][1]
+
+        return collect_global_refs(ci)
+    catch err
+        @error err
+        []
+    end
+end
+
+function collect_global_refs(ci::Core.CodeInfo, refs = Set([]))
+    for expr in ci.code
+        collect_global_refs(expr, refs)
+    end
+    refs
+end
+
+function collect_global_refs(expr::Expr, refs = Set([]))
+    args = Meta.isexpr(expr, :call) ? expr.args[2:end] : expr.args
+    for arg in args
+        collect_global_refs(arg, refs)
+    end
+
+    refs
+end
+
+collect_global_refs(expr, refs) = nothing
+collect_global_refs(expr::GlobalRef, refs) = push!(refs, expr)
+
+function push_module_names!(variables, state, mod)
+    for n in names(mod, all = true)
+        !isdefined(mod, n) && continue
+        Base.isdeprecated(mod, n) && continue
+
+        x = getfield(mod, n)
+        x === Main && continue
+
+        s = string(n)
+        startswith(s, "#") && continue
+
+        push!(variables, construct_return_msg_for_var(state, s, x))
+    end
+end
+
 function variables_request(conn, state::DebuggerState, params::VariablesArguments)
     @debug "getvariables_request"
 
@@ -449,6 +513,17 @@ function variables_request(conn, state::DebuggerState, params::VariablesArgument
             ret_val = JuliaInterpreter.get_return(curr_fr)
             push!(variables, construct_return_msg_for_var(state, "Return Value", ret_val))
         end
+    elseif var_ref.kind == :scope_globals
+        curr_fr = var_ref.value
+        globals = collect_global_refs(curr_fr)
+
+        for g in globals
+            if isdefined(g.mod, g.name)
+                push!(variables, construct_return_msg_for_var(state, string(g.mod, ".", g.name), getfield(g.mod, g.name)))
+            end
+        end
+    elseif var_ref.kind == :module
+        push_module_names!(variables, state, var_ref.value)
     elseif var_ref.kind == :var
         container_type = typeof(var_ref.value)
 
@@ -470,6 +545,8 @@ function variables_request(conn, state::DebuggerState, params::VariablesArgument
                     0,
                     missing
                 ))
+            elseif var_ref.value isa Base.Module
+                push_module_names!(variables, state, var_ref.value)
             else
                 for i = Iterators.take(Iterators.drop(1:fieldcount(container_type), skip_count), take_count)
                     s = isdefined(var_ref.value, i) ?

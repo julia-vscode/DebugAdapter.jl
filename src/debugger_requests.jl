@@ -17,7 +17,7 @@ function debug_notification(conn, state::DebuggerState, params::DebugArguments)
 
     @debug "We are debugging the file $filename_to_debug."
 
-    task_local_storage()[:SOURCE_PATH] = filename_to_debug
+    put!(state.next_cmd, (cmd = :set_source_path, source_path = filename_to_debug))
 
     ex = _parse_julia_file(filename_to_debug)
 

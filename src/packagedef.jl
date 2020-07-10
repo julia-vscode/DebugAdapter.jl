@@ -95,6 +95,8 @@ function startdebug(socket, error_handler = nothing)
                     break
                 elseif msg.cmd == :stop
                     break
+                elseif msg.cmd == :set_source_path
+                    task_local_storage()[:SOURCE_PATH] = msg.source_path
                 else
                     ret = if msg.cmd == :continue
                         our_debug_command(:c, state)

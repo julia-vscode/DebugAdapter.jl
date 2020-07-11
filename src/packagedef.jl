@@ -86,7 +86,7 @@ function startdebug(socket, error_handler = nothing)
 
                 if msg.cmd == :run
                     try
-                        include(msg.program)
+                        Core.eval(Main, :(include($(msg.program))))
                     catch err
                         Base.display_error(stderr, err, catch_backtrace())
                     end

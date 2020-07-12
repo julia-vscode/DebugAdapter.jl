@@ -19,10 +19,20 @@ function debug_notification(conn, state::DebuggerState, params::DebugArguments)
 
     put!(state.next_cmd, (cmd = :set_source_path, source_path = filename_to_debug))
 
-    ex = _parse_julia_file(filename_to_debug)
+    file_content = try
+        read(filename_to_debug, String)
+    catch err
+        # TODO Think about some way to return an error message in the UI
+        JSONRPC.send(conn, finished_notification_type, nothing)
+        put!(state.next_cmd, (cmd = :stop,))
+        return
+    end
+
+    ex = Base.parse_input_line(file_content; filename=filename_to_debug)
 
     # Empty file case
     if ex === nothing
+        # TODO Think about some way to return an error message in the UI
         JSONRPC.send(conn, finished_notification_type, nothing)
         put!(state.next_cmd, (cmd = :stop,))
         return

@@ -17,7 +17,7 @@ mutable struct DebuggerState
     next_cmd::Channel{Any}
 
     function DebuggerState()
-        return new(nothing, [], 0, nothing, Set{String}(), :unknown, JuliaInterpreter.finish_and_return!, Dict{Int,String}(), 1, VariableReference[], Channel{Any}())
+        return new(nothing, [], 0, nothing, Set{String}(), :unknown, JuliaInterpreter.finish_and_return!, Dict{Int,String}(), 1, VariableReference[], Channel{Any}(Inf))
     end
 end
 

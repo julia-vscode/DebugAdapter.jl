@@ -30,8 +30,8 @@ function debug_notification(conn, state::DebuggerState, params::DebugArguments)
 
     ex = Base.parse_input_line(file_content; filename = filename_to_debug)
 
-    # Empty file case
-    if ex === nothing
+    # handle a case when lowering fails
+    if !is_valid_expression(ex)
         # TODO Think about some way to return an error message in the UI
         JSONRPC.send(conn, finished_notification_type, nothing)
         put!(state.next_cmd, (cmd = :stop,))
@@ -51,6 +51,10 @@ function debug_notification(conn, state::DebuggerState, params::DebugArguments)
         put!(state.next_cmd, (cmd = :continue,))
     end
 end
+
+is_valid_expression(x) = true # atom
+is_valid_expression(::Nothing) = false # empty
+is_valid_expression(ex::Expr) = !Meta.isexpr(ex, (:incomplete, :error))
 
 function exec_notification(conn, state::DebuggerState, params::ExecArguments)
     @debug "exec_request"

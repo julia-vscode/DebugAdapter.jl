@@ -28,7 +28,7 @@ function debug_notification(conn, state::DebuggerState, params::DebugArguments)
         return
     end
 
-    ex = Base.parse_input_line(file_content; filename=filename_to_debug)
+    ex = Base.parse_input_line(file_content; filename = filename_to_debug)
 
     # Empty file case
     if ex === nothing

@@ -28,44 +28,58 @@ function calls_on_line(frame::JuliaInterpreter.Frame, line = nothing)
         line = loc[2]
     end
 
+    src = frame.framecode.src
+
     exprs = []
-    for pc in frame.pc:length(frame.framecode.src.codelocs)
+    for pc in frame.pc:length(src.codelocs)
         loc = JuliaInterpreter.whereis(frame, pc)
 
         if loc === nothing || loc[2] > line
             return exprs
         end
 
-        expr = JuliaInterpreter.pc_expr(frame, pc)
+        expr = JuliaInterpreter.pc_expr(src, pc)
         if Meta.isexpr(expr, :call)
             for i in 1:length(expr.args)
-                val = try
-                    JuliaInterpreter.@lookup(frame, expr.args[i])
-                catch err
-                    expr.args[i]
-                end
-                expr.args[i] = maybe_quote(val)
+                expr.args[i] = maybe_quote(expr.args[i])
             end
-            push!(exprs, (pc = pc, expr = prettify_expr(expr)))
+            push!(exprs, (pc = pc, expr = prettyprint_expr(expr, src)))
         elseif Meta.isexpr(expr, :(=))
             expr = expr.args[2]
-            push!(exprs, (pc = pc, expr = prettify_expr(expr)))
+            push!(exprs, (pc = pc, expr = prettyprint_expr(expr, src)))
         end
     end
     exprs
 end
 
-function prettify_expr(expr)
-    if Meta.isexpr(expr, :call)
-        fname = expr.args[1]
+function prettyprint_expr(expr, src)
+    io = IOBuffer()
+    prettyprint_expr(io, expr, src)
+    return String(take!(io))
+end
 
-        if Base.isoperator(Symbol(fname))
-            join(string.(expr.args[2:end]), " $(fname) ")
-        else
-            string(fname, '(', join(expr.args[2:end], ", "), ')')
+function prettyprint_expr(io, expr, src)
+    if Meta.isexpr(expr, :call)
+        for (i, ex) in enumerate(expr.args)
+            if ex isa QuoteNode
+                print(io, ex.value)
+            elseif ex isa JuliaInterpreter.SlotNumber || ex isa Core.SlotNumber
+                print(io, src.slotnames[ex.id])
+            elseif ex isa JuliaInterpreter.SSAValue || ex isa Core.SSAValue
+                print(io, '%', ex.id)
+            else
+                prettyprint_expr(io, ex, src)
+            end
+            if i == 1
+                print(io, '(')
+            elseif i == length(expr.args)
+                print(io, ')')
+            else
+                print(io, ", ")
+            end
         end
     else
-        repr(expr)
+        show(io, expr)
     end
 end
 

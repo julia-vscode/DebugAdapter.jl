@@ -43,7 +43,7 @@ function calls_on_line(frame::JuliaInterpreter.Frame, line = nothing)
             for i in 1:length(expr.args)
                 expr.args[i] = maybe_quote(expr.args[i])
             end
-            push!(exprs, (pc = pc, expr = prettyprint_expr(expr, src)))
+            push!(exprs, (pc = pc, expr = string("%", pc, " = ", prettyprint_expr(expr, src))))
         elseif Meta.isexpr(expr, :(=))
             expr = expr.args[2]
             push!(exprs, (pc = pc, expr = prettyprint_expr(expr, src)))

@@ -15,7 +15,7 @@ maybe_quote(x) = (isa(x, Expr) || isa(x, Symbol)) ? QuoteNode(x) : x
 # all calls in the current frame and the same "line"
 calls_on_line(state, args...) = calls_on_line(state.frame, args...)
 calls_on_line(::Nothing, args...) = []
-function calls_on_line(frame::JuliaInterpreter.Frame, line = nothing)
+function calls_on_line(frame::JuliaInterpreter.Frame, line=nothing)
     if line === nothing
         loc = JuliaInterpreter.whereis(frame)
         if loc === nothing

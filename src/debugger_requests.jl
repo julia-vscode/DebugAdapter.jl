@@ -28,7 +28,7 @@ function debug_notification(conn, state::DebuggerState, params::DebugArguments)
         return
     end
 
-    ex = Base.parse_input_line(file_content; filename = filename_to_debug)
+    ex = Base.parse_input_line(file_content; filename=filename_to_debug)
 
     # handle a case when lowering fails
     if !is_valid_expression(ex)
@@ -159,7 +159,7 @@ function set_function_break_points_request(conn, state::DebuggerState, params::S
                         end
                         if all_args_are_legit
 
-                            return (mod = Main, name = parsed_name.args[1], signature = map(j->j.args[1], parsed_name.args[2:end]), condition = parsed_condition)
+                            return (mod = Main, name = parsed_name.args[1], signature = map(j -> j.args[1], parsed_name.args[2:end]), condition = parsed_condition)
                         else
                             return (mod = Main, name = parsed_name.args[1], signature = nothing, condition = parsed_condition)
                         end
@@ -179,7 +179,7 @@ function set_function_break_points_request(conn, state::DebuggerState, params::S
         return nothing
     end
 
-    bps = filter(i->i !== nothing, bps)
+    bps = filter(i -> i !== nothing, bps)
 
     for bp in JuliaInterpreter.breakpoints()
         if bp isa JuliaInterpreter.BreakpointSignature
@@ -276,7 +276,7 @@ function stack_trace_request(conn, state::DebuggerState, params::StackTraceArgum
             else
                 src = curr_fr.framecode.src
                 src = JuliaInterpreter.copy_codeinfo(src)
-                JuliaInterpreter.replace_coretypes!(src; rev = true)
+                JuliaInterpreter.replace_coretypes!(src; rev=true)
                 code = Base.invokelatest(JuliaInterpreter.framecode_lines, src)
 
                 state.sources[state.next_source_id] = join(code, '\n')
@@ -371,17 +371,17 @@ function scopes_request(conn, state::DebuggerState, params::ScopesArguments)
     scopes = []
 
     if isfile(file_name) && code_range !== nothing
-        push!(scopes, Scope(name = "Local", variablesReference = local_var_ref_id, expensive = false, source = Source(name = basename(file_name), path = file_name), line = code_range.start, endLine = code_range.stop))
-        push!(scopes, Scope(name = "Global", variablesReference = global_var_ref_id, expensive = false, source = Source(name = basename(file_name), path = file_name), line = code_range.start, endLine = code_range.stop))
+        push!(scopes, Scope(name="Local", variablesReference=local_var_ref_id, expensive=false, source=Source(name=basename(file_name), path=file_name), line=code_range.start, endLine=code_range.stop))
+        push!(scopes, Scope(name="Global", variablesReference=global_var_ref_id, expensive=false, source=Source(name=basename(file_name), path=file_name), line=code_range.start, endLine=code_range.stop))
     else
-        push!(scopes, Scope(name = "Local", variablesReference = local_var_ref_id, expensive = false))
-        push!(scopes, Scope(name = "Global", variablesReference = global_var_ref_id, expensive = false))
+        push!(scopes, Scope(name="Local", variablesReference=local_var_ref_id, expensive=false))
+        push!(scopes, Scope(name="Global", variablesReference=global_var_ref_id, expensive=false))
     end
 
     curr_mod = JuliaInterpreter.moduleof(curr_fr)
     push!(state.varrefs, VariableReference(:module, curr_mod))
 
-    push!(scopes, Scope(name = "Global ($(curr_mod))", variablesReference = length(state.varrefs), expensive = true))
+    push!(scopes, Scope(name="Global ($(curr_mod))", variablesReference=length(state.varrefs), expensive=true))
 
     return ScopesResponseArguments(scopes)
 end
@@ -420,22 +420,22 @@ function construct_return_msg_for_var(state::DebuggerState, name, value)
         end
 
         return Variable(
-            name = name,
-            value = v_value_as_string,
-            type = string(v_type),
-            variablesReference = new_var_id,
-            namedVariables = named_count,
-            indexedVariables = indexed_count
+            name=name,
+            value=v_value_as_string,
+            type=string(v_type),
+            variablesReference=new_var_id,
+            namedVariables=named_count,
+            indexedVariables=indexed_count
         )
     else
-        return Variable(name = name, value = v_value_as_string, type = string(v_type), variablesReference = 0)
+        return Variable(name=name, value=v_value_as_string, type=string(v_type), variablesReference=0)
     end
 end
 
 function construct_return_msg_for_var_with_undef_value(state::DebuggerState, name)
     v_type_as_string = ""
 
-    return Variable(name = name, type = v_type_as_string, value = "#undef", variablesReference = 0)
+    return Variable(name=name, type=v_type_as_string, value="#undef", variablesReference=0)
 end
 
 function get_keys_with_drop_take(value, skip_count, take_count)
@@ -454,7 +454,7 @@ function collect_global_refs(frame::JuliaInterpreter.Frame)
         func = frame.framedata.locals[1].value
         args = (m.sig.parameters[2:end]...,)
 
-        ci = code_typed(func, args, optimize = false)[1][1]
+        ci = code_typed(func, args, optimize=false)[1][1]
 
         return collect_global_refs(ci)
     catch err
@@ -463,14 +463,14 @@ function collect_global_refs(frame::JuliaInterpreter.Frame)
     end
 end
 
-function collect_global_refs(ci::Core.CodeInfo, refs = Set([]))
+function collect_global_refs(ci::Core.CodeInfo, refs=Set([]))
     for expr in ci.code
         collect_global_refs(expr, refs)
     end
     refs
 end
 
-function collect_global_refs(expr::Expr, refs = Set([]))
+function collect_global_refs(expr::Expr, refs=Set([]))
     args = Meta.isexpr(expr, :call) ? expr.args[2:end] : expr.args
     for arg in args
         collect_global_refs(arg, refs)
@@ -483,7 +483,7 @@ collect_global_refs(expr, refs) = nothing
 collect_global_refs(expr::GlobalRef, refs) = push!(refs, expr)
 
 function push_module_names!(variables, state, mod)
-    for n in names(mod, all = true)
+    for n in names(mod, all=true)
         !isdefined(mod, n) && continue
         Base.isdeprecated(mod, n) && continue
 
@@ -584,7 +584,7 @@ function variables_request(conn, state::DebuggerState, params::VariablesArgument
                         val = Base.invokelatest(getindex, var_ref.value, i)
                         s = construct_return_msg_for_var(state, join(string.(i.I), ','), val)
                     catch err
-                        s = Variable(name = join(string.(i.I), ','), type = "", value = "#error", variablesReference = 0)
+                        s = Variable(name=join(string.(i.I), ','), type="", value="#error", variablesReference=0)
                     end
                     push!(variables, s)
                 end
@@ -848,7 +848,7 @@ function terminate_request(conn, state::DebuggerState, params::TerminateArgument
 end
 
 function threads_request(conn, state::DebuggerState, params::Nothing)
-    return ThreadsResponseArguments([Thread(id = 1, name = "Main Thread")])
+    return ThreadsResponseArguments([Thread(id=1, name="Main Thread")])
 end
 
 function breakpointlocations_request(conn, state::DebuggerState, params::BreakpointLocationsArguments)

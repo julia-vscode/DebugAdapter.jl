@@ -48,7 +48,7 @@ function get_next_top_level_frame(state)
     x = iterate(state.expr_splitter)
     x === nothing && return nothing
 
-    mod, ex = x
+    (mod, ex), _ = x
     if Meta.isexpr(ex, :global, 1)
         # global assignment can be lowered, but global declaration can't,
         # let's just evaluate and iterate to next

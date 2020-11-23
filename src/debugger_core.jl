@@ -5,7 +5,7 @@ end
 
 mutable struct DebuggerState
     last_exception
-    expr_splitter::JuliaInterpreter.ExprSplitter
+    expr_splitter::Union{JuliaInterpreter.ExprSplitter,Nothing}
     frame
     not_yet_set_function_breakpoints::Set{Any}
     debug_mode::Symbol
@@ -16,7 +16,7 @@ mutable struct DebuggerState
     next_cmd::Channel{Any}
 
     function DebuggerState()
-        return new(nothing, [], 0, nothing, Set{String}(), :unknown, JuliaInterpreter.finish_and_return!, Dict{Int,String}(), 1, VariableReference[], Channel{Any}(Inf))
+        return new(nothing, nothing, nothing, Set{String}(), :unknown, JuliaInterpreter.finish_and_return!, Dict{Int,String}(), 1, VariableReference[], Channel{Any}(Inf))
     end
 end
 
@@ -45,6 +45,7 @@ function attempt_to_set_f_breakpoints!(bps)
 end
 
 function get_next_top_level_frame(state)
+    state.expr_splitter === nothing && return nothing
     x = iterate(state.expr_splitter)
     x === nothing && return nothing
 

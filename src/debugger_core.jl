@@ -5,8 +5,7 @@ end
 
 mutable struct DebuggerState
     last_exception
-    top_level_expressions::Vector{Any}
-    current_top_level_expression::Int
+    expr_splitter::Union{JuliaInterpreter.ExprSplitter,Nothing}
     frame
     not_yet_set_function_breakpoints::Set{Any}
     debug_mode::Symbol
@@ -17,7 +16,7 @@ mutable struct DebuggerState
     next_cmd::Channel{Any}
 
     function DebuggerState()
-        return new(nothing, [], 0, nothing, Set{String}(), :unknown, JuliaInterpreter.finish_and_return!, Dict{Int,String}(), 1, VariableReference[], Channel{Any}(Inf))
+        return new(nothing, nothing, nothing, Set{String}(), :unknown, JuliaInterpreter.finish_and_return!, Dict{Int,String}(), 1, VariableReference[], Channel{Any}(Inf))
     end
 end
 
@@ -46,15 +45,18 @@ function attempt_to_set_f_breakpoints!(bps)
 end
 
 function get_next_top_level_frame(state)
-    state.current_top_level_expression += 1
+    state.expr_splitter === nothing && return nothing
+    x = iterate(state.expr_splitter)
+    x === nothing && return nothing
 
-    if state.current_top_level_expression > length(state.top_level_expressions)
-        return nothing
-    else
-        next_top_level = state.top_level_expressions[state.current_top_level_expression]
-        next_frame = JuliaInterpreter.prepare_thunk(next_top_level)
-        return next_frame
+    (mod, ex), _ = x
+    if Meta.isexpr(ex, :global, 1)
+        # global assignment can be lowered, but global declaration can't,
+        # let's just evaluate and iterate to next
+        Core.eval(mod, ex)
+        return get_next_top_level_frame(state)
     end
+    return JuliaInterpreter.Frame(mod, ex)
 end
 
 function our_debug_command(cmd, state)

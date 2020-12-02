@@ -38,8 +38,7 @@ function debug_notification(conn, state::DebuggerState, params::DebugArguments)
         return
     end
 
-    state.top_level_expressions, _ = JuliaInterpreter.split_expressions(Main, ex)
-    state.current_top_level_expression = 0
+    state.expr_splitter = JuliaInterpreter.ExprSplitter(Main, ex)
 
     state.frame = get_next_top_level_frame(state)
 
@@ -65,8 +64,7 @@ function exec_notification(conn, state::DebuggerState, params::ExecArguments)
 
     ex = Meta.parse(params.code)
 
-    state.top_level_expressions, _ = JuliaInterpreter.split_expressions(Main, ex)
-    state.current_top_level_expression = 0
+    state.expr_splitter = JuliaInterpreter.ExprSplitter(Main, ex) # TODO: line numbers ?
 
     state.frame = get_next_top_level_frame(state)
 
@@ -738,8 +736,6 @@ function restart_frame_request(conn, state::DebuggerState, params::RestartFrameA
 
     if curr_fr.caller === nothing
         # We are in the top level
-
-        state.current_top_level_expression = 0
 
         state.frame = get_next_top_level_frame(state)
     else

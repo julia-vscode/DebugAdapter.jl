@@ -62,8 +62,10 @@ function exec_notification(conn, state::DebuggerState, params::ExecArguments)
 
     state.sources[0] = params.code
 
-    ex = Meta.parse(params.code)
+    @debug "setting source_path" file = params.file
+    put!(state.next_cmd, (cmd = :set_source_path, source_path = params.file))
 
+    ex = Meta.parse(params.code)
     state.expr_splitter = JuliaInterpreter.ExprSplitter(Main, ex) # TODO: line numbers ?
 
     state.frame = get_next_top_level_frame(state)

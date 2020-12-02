@@ -28,6 +28,7 @@ end
 @dict_readable struct ExecArguments <: Outbound
     stopOnEntry::Bool
     code::String
+    file::String
 end
 
 # Our own requests

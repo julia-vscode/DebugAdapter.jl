@@ -93,9 +93,15 @@ function set_break_points_request(conn, state::DebuggerState, params::SetBreakpo
     end
 
     for bp in params.breakpoints
-        @debug "Setting one breakpoint at line $(bp.line) with condition $(bp.condition) in file $file."
+        condition = bp.condition === missing ? nothing : try
+            Meta.parse(bp.condition)
+        catch err
+            @debug "invalid condition: `$(bp.condition)`. falling back to always breaking." exception = err
+            nothing
+        end
 
-        JuliaInterpreter.breakpoint(file, bp.line, bp.condition === missing ? nothing : bp.condition)
+        @debug "Setting one breakpoint at line $(bp.line) with condition $(condition) in file $file."
+        JuliaInterpreter.breakpoint(file, bp.line, condition)
     end
 
     res = SetBreakpointsResponseArguments([Breakpoint(true) for i = 1:length(params.breakpoints)])
@@ -137,6 +143,7 @@ function set_function_break_points_request(conn, state::DebuggerState, params::S
         parsed_condition = try
             decoded_condition == "" ? nothing : Meta.parse(decoded_condition)
         catch err
+            @debug "invalid condition: `$(decoded_condition)`. falling back to always breaking." exception = err
             nothing
         end
 

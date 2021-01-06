@@ -452,7 +452,7 @@ function collect_global_refs(frame::JuliaInterpreter.Frame)
         m isa Method || return []
 
         func = frame.framedata.locals[1].value
-        args = (m.sig.parameters[2:end]...,)
+        args = (Base.unwrap_unionall(m.sig).parameters[2:end]...,)
 
         ci = code_typed(func, args, optimize=false)[1][1]
 

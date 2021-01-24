@@ -32,7 +32,7 @@ end
 end
 
 # Our own requests
-const run_notification_type = JSONRPC.NotificationType("run", String)
+const run_notification_type = JSONRPC.NotificationType("run", NamedTuple{(:program,),Tuple{String}})
 const debug_notification_type = JSONRPC.NotificationType("debug", DebugArguments)
 const exec_notification_type = JSONRPC.NotificationType("exec", ExecArguments)
 const finished_notification_type = JSONRPC.NotificationType("finished", Nothing)

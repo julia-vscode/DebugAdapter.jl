@@ -1,11 +1,11 @@
 # Request handlers
 
-function run_notification(conn, state::DebuggerState, params::String)
+function run_notification(conn, state::DebuggerState, params::NamedTuple{(:program,),Tuple{String}})
     @debug "run_request"
 
     state.debug_mode = :launch
 
-    put!(state.next_cmd, (cmd = :run, program = params))
+    put!(state.next_cmd, (cmd = :run, program = params.program))
 end
 
 function debug_notification(conn, state::DebuggerState, params::DebugArguments)

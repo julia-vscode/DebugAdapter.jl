@@ -29,6 +29,7 @@ end
     stopOnEntry::Bool
     code::String
     file::String
+    compiledModulesOrFunctions::Union{Missing, Vector{String}}
 end
 
 # Our own requests

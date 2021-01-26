@@ -70,6 +70,30 @@ function exec_notification(conn, state::DebuggerState, params::ExecArguments)
 
     state.frame = get_next_top_level_frame(state)
 
+    # reset compiled modules/methods
+    empty!(JuliaInterpreter.compiled_modules)
+    empty!(JuliaInterpreter.compiled_methods)
+    JuliaInterpreter.set_compiled_methods()
+
+    # user wants these compiled:
+    if params.compiledModulesOrFunctions isa Vector && length(params.compiledModulesOrFunctions) > 0
+        for acc in params.compiledModulesOrFunctions
+            all_submodules = endswith(acc, '.')
+            acc = strip(acc, '.')
+            obj = get_obj_by_accessor(acc)
+            if obj isa Base.Module
+                push!(JuliaInterpreter.compiled_modules, obj)
+                if all_submodules
+                    compile_mode_for_all_submodules(obj)
+                end
+            elseif obj isa Base.Callable
+                for m in methods(obj)
+                    push!(JuliaInterpreter.compiled_methods, m)
+                end
+            end
+        end
+    end
+
     if params.stopOnEntry
         JSONRPC.send(conn, stopped_notification_type, StoppedEventArguments("entry", missing, 1, missing, missing, missing))
     elseif JuliaInterpreter.shouldbreak(state.frame, state.frame.pc)
@@ -77,6 +101,53 @@ function exec_notification(conn, state::DebuggerState, params::ExecArguments)
     else
         put!(state.next_cmd, (cmd = :continue,))
     end
+end
+
+function compile_mode_for_all_submodules(mod, seen = Set())
+    for name in names(mod; all = true)
+        if isdefined(mod, name)
+            obj = getfield(mod, name)
+            if obj !== mod && obj isa Base.Module && !(obj in seen)
+                push!(seen, obj)
+                push!(JuliaInterpreter.compiled_modules, obj)
+                compile_mode_for_all_submodules(obj, seen)
+            end
+        end
+    end
+end
+
+function get_obj_by_accessor(accessor, super = nothing)
+    parts = split(accessor, '.')
+    @assert length(parts) > 0
+    top = popfirst!(parts)
+    if super === nothing
+        # try getting module from loaded_modules_array first and then from Main:
+        loaded_modules = Base.loaded_modules_array()
+        ind = findfirst(==(top), string.(loaded_modules))
+        if ind !== nothing
+            root = loaded_modules[ind]
+            if length(parts) > 0
+                return get_obj_by_accessor(join(parts, '.'), root)
+            end
+            return root
+        else
+            return get_obj_by_accessor(accessor, Main)
+        end
+    else
+        for name in names(super; all = true)
+            if string(name) == top && isdefined(super, name)
+                this = getfield(super, name)
+                if length(parts) > 0
+                    if this isa Module
+                        return get_obj_by_accessor(join(parts, '.'), this)
+                    end
+                else
+                    return this
+                end
+            end
+        end
+    end
+    return nothing
 end
 
 function set_break_points_request(conn, state::DebuggerState, params::SetBreakpointsArguments)

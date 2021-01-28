@@ -9,7 +9,7 @@ function run_notification(conn, state::DebuggerState, params::NamedTuple{(:progr
 end
 
 function debug_notification(conn, state::DebuggerState, params::DebugArguments)
-    @debug "debug_request"
+    @debug "debug_request" params=params
 
     state.debug_mode = :launch
 
@@ -38,8 +38,9 @@ function debug_notification(conn, state::DebuggerState, params::DebugArguments)
         return
     end
 
-    state.expr_splitter = JuliaInterpreter.ExprSplitter(Main, ex)
+    set_compiled_items_request(conn, state, (compiledModulesOrFunctions = params.compiledModulesOrFunctions,))
 
+    state.expr_splitter = JuliaInterpreter.ExprSplitter(Main, ex)
     state.frame = get_next_top_level_frame(state)
 
     if params.stopOnEntry
@@ -65,34 +66,11 @@ function exec_notification(conn, state::DebuggerState, params::ExecArguments)
     @debug "setting source_path" file = params.file
     put!(state.next_cmd, (cmd = :set_source_path, source_path = params.file))
 
+    set_compiled_items_request(conn, state, (compiledModulesOrFunctions = params.compiledModulesOrFunctions,))
+
     ex = Meta.parse(params.code)
     state.expr_splitter = JuliaInterpreter.ExprSplitter(Main, ex) # TODO: line numbers ?
-
     state.frame = get_next_top_level_frame(state)
-
-    # reset compiled modules/methods
-    empty!(JuliaInterpreter.compiled_modules)
-    empty!(JuliaInterpreter.compiled_methods)
-    JuliaInterpreter.set_compiled_methods()
-
-    # user wants these compiled:
-    if params.compiledModulesOrFunctions isa Vector && length(params.compiledModulesOrFunctions) > 0
-        for acc in params.compiledModulesOrFunctions
-            all_submodules = endswith(acc, '.')
-            acc = strip(acc, '.')
-            obj = get_obj_by_accessor(acc)
-            if obj isa Base.Module
-                push!(JuliaInterpreter.compiled_modules, obj)
-                if all_submodules
-                    compile_mode_for_all_submodules(obj)
-                end
-            elseif obj isa Base.Callable
-                for m in methods(obj)
-                    push!(JuliaInterpreter.compiled_methods, m)
-                end
-            end
-        end
-    end
 
     if params.stopOnEntry
         JSONRPC.send(conn, stopped_notification_type, StoppedEventArguments("entry", missing, 1, missing, missing, missing))
@@ -101,6 +79,60 @@ function exec_notification(conn, state::DebuggerState, params::ExecArguments)
     else
         put!(state.next_cmd, (cmd = :continue,))
     end
+end
+
+function reset_compiled_items()
+    @debug "reset_compiled_items"
+    # reset compiled modules/methods
+    empty!(JuliaInterpreter.compiled_modules)
+    empty!(JuliaInterpreter.compiled_methods)
+    JuliaInterpreter.set_compiled_methods()
+end
+
+function set_compiled_items_request(conn, state::DebuggerState, params)
+    @debug "set_compiled_items_request"
+    reset_compiled_items()
+    state.not_yet_set_compiled_items = set_compiled_functions_modules!(params)
+end
+
+function set_compiled_functions_modules!(items::Vector{String})
+    @debug "set_compiled_functions_modules!"
+
+    unset = String[]
+
+    @debug "setting as compiled" items=items
+
+    # user wants these compiled:
+    for acc in items
+        all_submodules = endswith(acc, '.')
+        acc = strip(acc, '.')
+        obj = get_obj_by_accessor(acc)
+
+        if obj === nothing
+            push!(unset, acc)
+            continue
+        end
+
+        if obj isa Base.Module
+            push!(JuliaInterpreter.compiled_modules, obj)
+            if all_submodules
+                compile_mode_for_all_submodules(obj)
+            end
+        elseif obj isa Base.Callable
+            for m in methods(obj)
+                push!(JuliaInterpreter.compiled_methods, m)
+            end
+        end
+    end
+    @debug "could not set as compiled" unset=unset
+    return unset
+end
+
+function set_compiled_functions_modules!(params)
+    if params.compiledModulesOrFunctions isa Vector && length(params.compiledModulesOrFunctions) > 0
+        return set_compiled_functions_modules!(params.compiledModulesOrFunctions)
+    end
+    return []
 end
 
 function compile_mode_for_all_submodules(mod, seen = Set())
@@ -273,13 +305,17 @@ end
 function stack_trace_request(conn, state::DebuggerState, params::StackTraceArguments)
     @debug "getstacktrace_request"
 
+    frames = StackFrame[]
     fr = state.frame
+
+    if fr === nothing
+        @info fr
+        return StackTraceResponseArguments(frames, length(frames))
+    end
 
     curr_fr = JuliaInterpreter.leaf(fr)
 
     frames_as_string = String[]
-
-    frames = StackFrame[]
 
     id = 1
     while curr_fr !== nothing

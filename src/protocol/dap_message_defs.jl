@@ -23,6 +23,7 @@ const breakpointslocation_request_type = JSONRPC.RequestType("breakpointLocation
 @dict_readable struct DebugArguments <: Outbound
     stopOnEntry::Bool
     program::String
+    compiledModulesOrFunctions::Union{Missing, Vector{String}}
 end
 
 @dict_readable struct ExecArguments <: Outbound
@@ -37,3 +38,4 @@ const run_notification_type = JSONRPC.NotificationType("run", NamedTuple{(:progr
 const debug_notification_type = JSONRPC.NotificationType("debug", DebugArguments)
 const exec_notification_type = JSONRPC.NotificationType("exec", ExecArguments)
 const finished_notification_type = JSONRPC.NotificationType("finished", Nothing)
+const set_compiled_items_notification_type = JSONRPC.NotificationType("setCompiledItems", NamedTuple{(:compiledModulesOrFunctions,),Tuple{Vector{String}}})

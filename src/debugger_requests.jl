@@ -353,6 +353,7 @@ end
 
 function scopes_request(conn, state::DebuggerState, params::ScopesArguments)
     @debug "getscope_request"
+    empty!(state.varrefs)
 
     curr_fr = JuliaInterpreter.leaf(state.frame)
 

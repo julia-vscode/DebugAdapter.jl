@@ -61,7 +61,6 @@ function get_next_top_level_frame(state)
 end
 
 function our_debug_command(cmd, state)
-    empty!(state.varrefs)
     while true
         @debug "Running a new frame." state.frame state.compile_mode
 

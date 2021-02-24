@@ -88,6 +88,7 @@ function reset_compiled_items()
     # reset compiled modules/methods
     empty!(JuliaInterpreter.compiled_modules)
     empty!(JuliaInterpreter.compiled_methods)
+    empty!(JuliaInterpreter.interpreted_methods)
     JuliaInterpreter.set_compiled_methods()
 end
 
@@ -116,6 +117,10 @@ function set_compiled_functions_modules!(items::Vector{String})
 
     # user wants these compiled:
     for acc in items
+        is_interpreted = startswith(acc, '-') && length(acc) > 1
+        if is_interpreted
+            acc = acc[2:end]
+        end
         all_submodules = endswith(acc, '.')
         acc = strip(acc, '.')
         obj = get_obj_by_accessor(acc)
@@ -123,6 +128,16 @@ function set_compiled_functions_modules!(items::Vector{String})
         if obj === nothing
             push!(unset, acc)
             continue
+        end
+
+        if is_interpreted && obj isa Base.Callable
+            try
+                for m in methods(obj)
+                    push!(JuliaInterpreter.interpreted_methods, m)
+                end
+            catch err
+                @warn "Setting $obj as an interpreted method failed."
+            end
         end
 
         if obj isa Base.Module

@@ -38,7 +38,8 @@ function debug_notification(conn, state::DebuggerState, params::DebugArguments)
         return
     end
 
-    set_compiled_items_request(conn, state, (compiledModulesOrFunctions = params.compiledModulesOrFunctions,))
+    params.compiledModulesOrFunctions !== missing && set_compiled_items_request(conn, state, (compiledModulesOrFunctions = params.compiledModulesOrFunctions,))
+    params.compiledMode !== missing && set_compiled_mode_request(conn, state, (compiledMode = params.compiledMode,))
 
     state.expr_splitter = JuliaInterpreter.ExprSplitter(Main, ex)
     state.frame = get_next_top_level_frame(state)
@@ -57,7 +58,7 @@ is_valid_expression(::Nothing) = false # empty
 is_valid_expression(ex::Expr) = !Meta.isexpr(ex, (:incomplete, :error))
 
 function exec_notification(conn, state::DebuggerState, params::ExecArguments)
-    @debug "exec_request"
+    @debug "exec_request" params = params
 
     state.debug_mode = :attach
 
@@ -66,7 +67,8 @@ function exec_notification(conn, state::DebuggerState, params::ExecArguments)
     @debug "setting source_path" file = params.file
     put!(state.next_cmd, (cmd = :set_source_path, source_path = params.file))
 
-    set_compiled_items_request(conn, state, (compiledModulesOrFunctions = params.compiledModulesOrFunctions,))
+    params.compiledModulesOrFunctions !== missing && set_compiled_items_request(conn, state, (compiledModulesOrFunctions = params.compiledModulesOrFunctions,))
+    params.compiledMode !== missing && set_compiled_mode_request(conn, state, (compiledMode = params.compiledMode,))
 
     ex = Meta.parse(params.code)
     state.expr_splitter = JuliaInterpreter.ExprSplitter(Main, ex) # TODO: line numbers ?
@@ -93,6 +95,16 @@ function set_compiled_items_request(conn, state::DebuggerState, params)
     @debug "set_compiled_items_request"
     reset_compiled_items()
     state.not_yet_set_compiled_items = set_compiled_functions_modules!(params)
+end
+
+function set_compiled_mode_request(conn, state::DebuggerState, params)
+    @debug "set_compiled_mode_request"
+
+    if params.compiledMode
+        state.compile_mode = JuliaInterpreter.Compiled()
+    else
+        state.compile_mode = JuliaInterpreter.finish_and_return!
+    end
 end
 
 function set_compiled_functions_modules!(items::Vector{String})
@@ -223,12 +235,6 @@ function set_exception_break_points_request(conn, state::DebuggerState, params::
         JuliaInterpreter.break_on(:throw)
     else
         JuliaInterpreter.break_off(:throw)
-    end
-
-    if "compilemode" in opts
-        state.compile_mode = JuliaInterpreter.Compiled()
-    else
-        state.compile_mode = JuliaInterpreter.finish_and_return!
     end
 
     return SetExceptionBreakpointsResponseArguments(String[], missing)

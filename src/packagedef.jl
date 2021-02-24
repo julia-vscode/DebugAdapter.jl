@@ -69,6 +69,7 @@ function startdebug(socket, error_handler=nothing)
             msg_dispatcher[threads_request_type] = (conn, params) -> threads_request(conn, state, params)
             msg_dispatcher[breakpointslocation_request_type] = (conn, params) -> breakpointlocations_request(conn, state, params)
             msg_dispatcher[set_compiled_items_notification_type] = (conn, params) -> set_compiled_items_request(conn, state, params)
+            msg_dispatcher[set_compiled_mode_notification_type] = (conn, params) -> set_compiled_mode_request(conn, state, params)
 
             @async try
                 for msg in endpoint

@@ -34,7 +34,7 @@ function calls_on_line(frame::JuliaInterpreter.Frame, line=nothing)
             return exprs
         end
 
-        expr = JuliaInterpreter.pc_expr(src, pc)
+        expr = deepcopy(JuliaInterpreter.pc_expr(src, pc))
         if Meta.isexpr(expr, :call)
             for i in 1:length(expr.args)
                 expr.args[i] = maybe_quote(expr.args[i])

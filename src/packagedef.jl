@@ -84,6 +84,8 @@ function startdebug(socket, error_handler=nothing)
             while true
                 msg = take!(state.next_cmd)
 
+                ret = nothing
+
                 if msg.cmd == :run
                     try
                         Main.include(msg.program)
@@ -98,22 +100,37 @@ function startdebug(socket, error_handler=nothing)
                 elseif msg.cmd == :set_source_path
                     task_local_storage()[:SOURCE_PATH] = msg.source_path
                 else
-                    ret = if msg.cmd == :continue
-                        our_debug_command(:c, state)
+                    if msg.cmd == :continue
+                        ret = our_debug_command(:c, state)
                     elseif msg.cmd == :next
-                        our_debug_command(:n, state)
+                        ret = our_debug_command(:n, state)
                     elseif msg.cmd == :stepIn
                         if msg.targetId === missing
-                            our_debug_command(:s, state)
+                            ret = our_debug_command(:s, state)
                         else
+                            pc = state.frame.pc
+                            itr = 0
+                            success = true
                             while state.frame.pc < msg.targetId
-                                our_debug_command(:nc, state)
+                                ret = our_debug_command(:nc, state)
+                                if ret isa JuliaInterpreter.BreakpointRef
+                                    success = false
+                                    break
+                                end
+                                itr += 1
+                                if itr > 100
+                                    success = false
+                                    @warn "Could not step into sepcified target."
+                                    break
+                                end
                             end
 
-                            our_debug_command(:s, state)
+                            if success
+                                ret = our_debug_command(:s, state)
+                            end
                         end
                     elseif msg.cmd == :stepOut
-                        our_debug_command(:finish, state)
+                        ret = our_debug_command(:finish, state)
                     end
 
                     if ret === nothing

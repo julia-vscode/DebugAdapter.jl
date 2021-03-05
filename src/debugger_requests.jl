@@ -135,6 +135,7 @@ function set_compiled_functions_modules!(items::Vector{String})
                 for m in methods(obj)
                     push!(JuliaInterpreter.interpreted_methods, m)
                 end
+                continue
             catch err
                 @warn "Setting $obj as an interpreted method failed."
             end

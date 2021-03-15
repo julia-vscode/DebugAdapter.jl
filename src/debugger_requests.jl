@@ -90,6 +90,7 @@ function reset_compiled_items()
     empty!(JuliaInterpreter.compiled_methods)
     empty!(JuliaInterpreter.interpreted_methods)
     JuliaInterpreter.set_compiled_methods()
+    JuliaInterpreter.clear_caches()
 end
 
 function set_compiled_items_request(conn, state::DebuggerState, params)
@@ -152,6 +153,7 @@ function set_compiled_functions_modules!(items::Vector{String})
             end
         end
     end
+
     @debug "could not set as compiled" unset = unset
     return unset
 end

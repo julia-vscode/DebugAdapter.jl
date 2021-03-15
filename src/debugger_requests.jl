@@ -9,7 +9,7 @@ function run_notification(conn, state::DebuggerState, params::NamedTuple{(:progr
 end
 
 function debug_notification(conn, state::DebuggerState, params::DebugArguments)
-    @debug "debug_request" params=params
+    @debug "debug_request" params = params
 
     state.debug_mode = :launch
 
@@ -28,7 +28,7 @@ function debug_notification(conn, state::DebuggerState, params::DebugArguments)
         return
     end
 
-    ex = Base.parse_input_line(file_content; filename=filename_to_debug)
+    ex = Base.parse_input_line(file_content; filename = filename_to_debug)
 
     # handle a case when lowering fails
     if !is_valid_expression(ex)
@@ -113,7 +113,7 @@ function set_compiled_functions_modules!(items::Vector{String})
 
     unset = String[]
 
-    @debug "setting as compiled" items=items
+    @debug "setting as compiled" items = items
 
     # user wants these compiled:
     for acc in items
@@ -132,7 +132,7 @@ function set_compiled_functions_modules!(items::Vector{String})
 
         if is_interpreted && obj isa Base.Callable
             try
-                for m in methods(obj)
+                for m in methods(Base.unwrap_unionall(obj))
                     push!(JuliaInterpreter.interpreted_methods, m)
                 end
                 continue
@@ -147,12 +147,12 @@ function set_compiled_functions_modules!(items::Vector{String})
                 compile_mode_for_all_submodules(obj)
             end
         elseif obj isa Base.Callable
-            for m in methods(obj)
+            for m in methods(Base.unwrap_unionall(obj))
                 push!(JuliaInterpreter.compiled_methods, m)
             end
         end
     end
-    @debug "could not set as compiled" unset=unset
+    @debug "could not set as compiled" unset = unset
     return unset
 end
 
@@ -298,7 +298,7 @@ function set_function_break_points_request(conn, state::DebuggerState, params::S
                     end
                 else
                     return nothing
-                end
+        end
             else
                 return nothing
             end
@@ -410,7 +410,7 @@ function stack_trace_request(conn, state::DebuggerState, params::StackTraceArgum
             else
                 src = curr_fr.framecode.src
                 src = JuliaInterpreter.copy_codeinfo(src)
-                JuliaInterpreter.replace_coretypes!(src; rev=true)
+                JuliaInterpreter.replace_coretypes!(src; rev = true)
                 code = Base.invokelatest(JuliaInterpreter.framecode_lines, src)
 
                 state.sources[state.next_source_id] = join(code, '\n')
@@ -506,17 +506,17 @@ function scopes_request(conn, state::DebuggerState, params::ScopesArguments)
     scopes = []
 
     if isfile(file_name) && code_range !== nothing
-        push!(scopes, Scope(name="Local", variablesReference=local_var_ref_id, expensive=false, source=Source(name=basename(file_name), path=file_name), line=code_range.start, endLine=code_range.stop))
-        push!(scopes, Scope(name="Global", variablesReference=global_var_ref_id, expensive=false, source=Source(name=basename(file_name), path=file_name), line=code_range.start, endLine=code_range.stop))
+        push!(scopes, Scope(name = "Local", variablesReference = local_var_ref_id, expensive = false, source = Source(name = basename(file_name), path = file_name), line = code_range.start, endLine = code_range.stop))
+        push!(scopes, Scope(name = "Global", variablesReference = global_var_ref_id, expensive = false, source = Source(name = basename(file_name), path = file_name), line = code_range.start, endLine = code_range.stop))
     else
-        push!(scopes, Scope(name="Local", variablesReference=local_var_ref_id, expensive=false))
-        push!(scopes, Scope(name="Global", variablesReference=global_var_ref_id, expensive=false))
+        push!(scopes, Scope(name = "Local", variablesReference = local_var_ref_id, expensive = false))
+        push!(scopes, Scope(name = "Global", variablesReference = global_var_ref_id, expensive = false))
     end
 
     curr_mod = JuliaInterpreter.moduleof(curr_fr)
     push!(state.varrefs, VariableReference(:module, curr_mod))
 
-    push!(scopes, Scope(name="Global ($(curr_mod))", variablesReference=length(state.varrefs), expensive=true))
+    push!(scopes, Scope(name = "Global ($(curr_mod))", variablesReference = length(state.varrefs), expensive = true))
 
     return ScopesResponseArguments(scopes)
 end
@@ -541,7 +541,7 @@ function construct_return_msg_for_var(state::DebuggerState, name, value)
             0
         elseif value isa AbstractArray || value isa AbstractDict
             fieldcount(v_type) > 0 ? 1 : 0
-        else
+            else
             fieldcount(v_type)
         end
 
@@ -553,24 +553,24 @@ function construct_return_msg_for_var(state::DebuggerState, name, value)
             catch err
             end
         end
-
+    
         return Variable(
-            name=name,
-            value=v_value_as_string,
-            type=string(v_type),
-            variablesReference=new_var_id,
-            namedVariables=named_count,
-            indexedVariables=indexed_count
+            name = name,
+            value = v_value_as_string,
+            type = string(v_type),
+            variablesReference = new_var_id,
+            namedVariables = named_count,
+            indexedVariables = indexed_count
         )
     else
-        return Variable(name=name, value=v_value_as_string, type=string(v_type), variablesReference=0)
+        return Variable(name = name, value = v_value_as_string, type = string(v_type), variablesReference = 0)
     end
 end
 
 function construct_return_msg_for_var_with_undef_value(state::DebuggerState, name)
     v_type_as_string = ""
 
-    return Variable(name=name, type=v_type_as_string, value="#undef", variablesReference=0)
+    return Variable(name = name, type = v_type_as_string, value = "#undef", variablesReference = 0)
 end
 
 function get_keys_with_drop_take(value, skip_count, take_count)
@@ -580,7 +580,7 @@ end
 function get_cartesian_with_drop_take(value, skip_count, take_count)
     collect(Iterators.take(Iterators.drop(CartesianIndices(value), skip_count), take_count))
 end
-
+        
 function collect_global_refs(frame::JuliaInterpreter.Frame)
     try
         m = JuliaInterpreter.scopeof(frame)
@@ -589,7 +589,7 @@ function collect_global_refs(frame::JuliaInterpreter.Frame)
         func = frame.framedata.locals[1].value
         args = (Base.unwrap_unionall(m.sig).parameters[2:end]...,)
 
-        ci = code_typed(func, args, optimize=false)[1][1]
+        ci = code_typed(func, args, optimize = false)[1][1]
 
         return collect_global_refs(ci)
     catch err
@@ -598,14 +598,14 @@ function collect_global_refs(frame::JuliaInterpreter.Frame)
     end
 end
 
-function collect_global_refs(ci::Core.CodeInfo, refs=Set([]))
+function collect_global_refs(ci::Core.CodeInfo, refs = Set([]))
     for expr in ci.code
         collect_global_refs(expr, refs)
     end
     refs
 end
 
-function collect_global_refs(expr::Expr, refs=Set([]))
+function collect_global_refs(expr::Expr, refs = Set([]))
     args = Meta.isexpr(expr, :call) ? expr.args[2:end] : expr.args
     for arg in args
         collect_global_refs(arg, refs)
@@ -618,12 +618,12 @@ collect_global_refs(expr, refs) = nothing
 collect_global_refs(expr::GlobalRef, refs) = push!(refs, expr)
 
 function push_module_names!(variables, state, mod)
-    for n in names(mod, all=true)
+    for n in names(mod, all = true)
         !isdefined(mod, n) && continue
         Base.isdeprecated(mod, n) && continue
 
         x = getfield(mod, n)
-        x === Main && continue
+    x === Main && continue
 
         s = string(n)
         startswith(s, "#") && continue
@@ -719,7 +719,7 @@ function variables_request(conn, state::DebuggerState, params::VariablesArgument
                         val = Base.invokelatest(getindex, var_ref.value, i)
                         s = construct_return_msg_for_var(state, join(string.(i.I), ','), val)
                     catch err
-                        s = Variable(name=join(string.(i.I), ','), type="", value="#error", variablesReference=0)
+                        s = Variable(name = join(string.(i.I), ','), type = "", value = "#error", variablesReference = 0)
                     end
                     push!(variables, s)
                 end
@@ -768,7 +768,7 @@ function set_variable_request(conn, state::DebuggerState, params::SetVariableArg
     varref_id = params.variablesReference
     var_name = params.name
     var_value = params.value
-
+        
     val_parsed = try
         parsed = Meta.parse(var_value)
 
@@ -864,7 +864,7 @@ function restart_frame_request(conn, state::DebuggerState, params::RestartFrameA
 
     curr_fr = JuliaInterpreter.leaf(state.frame)
 
-    i = 1
+        i = 1
 
     while frame_id > i
         curr_fr = curr_fr.caller
@@ -921,7 +921,7 @@ function evaluate_request(conn, state::DebuggerState, params::EvaluateArguments)
     end
 end
 
-function continue_request(conn, state::DebuggerState, params::ContinueArguments)
+    function continue_request(conn, state::DebuggerState, params::ContinueArguments)
     @debug "continue_request"
 
     put!(state.next_cmd, (cmd = :continue,))
@@ -981,7 +981,7 @@ function terminate_request(conn, state::DebuggerState, params::TerminateArgument
 end
 
 function threads_request(conn, state::DebuggerState, params::Nothing)
-    return ThreadsResponseArguments([Thread(id=1, name="Main Thread")])
+    return ThreadsResponseArguments([Thread(id = 1, name = "Main Thread")])
 end
 
 function breakpointlocations_request(conn, state::DebuggerState, params::BreakpointLocationsArguments)

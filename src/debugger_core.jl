@@ -14,9 +14,10 @@ mutable struct DebuggerState
     next_source_id::Int
     varrefs::Vector{VariableReference}
     next_cmd::Channel{Any}
+    not_yet_set_compiled_items::Vector{String}
 
     function DebuggerState()
-        return new(nothing, nothing, nothing, Set{String}(), :unknown, JuliaInterpreter.finish_and_return!, Dict{Int,String}(), 1, VariableReference[], Channel{Any}(Inf))
+        return new(nothing, nothing, nothing, Set{String}(), :unknown, JuliaInterpreter.finish_and_return!, Dict{Int,String}(), 1, VariableReference[], Channel{Any}(Inf), String[])
     end
 end
 
@@ -65,6 +66,7 @@ function our_debug_command(cmd, state)
 
         ret = Base.invokelatest(JuliaInterpreter.debug_command, state.compile_mode, state.frame, cmd, true)
 
+        state.not_yet_set_compiled_items = set_compiled_functions_modules!(state.not_yet_set_compiled_items)
         attempt_to_set_f_breakpoints!(state.not_yet_set_function_breakpoints)
 
         @debug "Finished running frame." ret

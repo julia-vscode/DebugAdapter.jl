@@ -128,7 +128,7 @@ end
     presentationHint::Union{Missing,VariablePresentationHint}
     variablesReference::Int
     namedVariables::Union{Missing,Int}
-    indexedVariables::Union{Missing,Int}
+indexedVariables::Union{Missing,Int}
     memoryReference::Union{Missing,String}
 end
 
@@ -156,7 +156,7 @@ end
 @dict_readable struct ExceptionInfoResponseArguments <: Outbound
     exceptionId::String
     description::Union{Missing,String}
-    breakMode::ExceptionBreakMode
+breakMode::ExceptionBreakMode
     details::Union{Missing,ExceptionDetails}
 end
 

@@ -235,7 +235,7 @@ function set_break_points_request(conn, state::DebuggerState, params::SetBreakpo
         JuliaInterpreter.breakpoint(file, bp.line, condition)
     end
 
-    res = SetBreakpointsResponseArguments([Breakpoint(true) for i = 1:length(params.breakpoints)])
+    SetBreakpointsResponseArguments([Breakpoint(true) for _ in params.breakpoints])
 end
 
 function set_exception_break_points_request(conn, state::DebuggerState, params::SetExceptionBreakpointsArguments)
@@ -555,7 +555,7 @@ function construct_return_msg_for_var(state::DebuggerState, name, value)
             catch err
             end
         end
-    
+
         return Variable(
             name = name,
             value = v_value_as_string,
@@ -582,7 +582,7 @@ end
 function get_cartesian_with_drop_take(value, skip_count, take_count)
     collect(Iterators.take(Iterators.drop(CartesianIndices(value), skip_count), take_count))
 end
-        
+
 function collect_global_refs(frame::JuliaInterpreter.Frame)
     try
         m = JuliaInterpreter.scopeof(frame)
@@ -770,7 +770,7 @@ function set_variable_request(conn, state::DebuggerState, params::SetVariableArg
     varref_id = params.variablesReference
     var_name = params.name
     var_value = params.value
-        
+
     val_parsed = try
         parsed = Meta.parse(var_value)
 
@@ -780,7 +780,7 @@ function set_variable_request(conn, state::DebuggerState, params::SetVariableArg
 
         parsed
     catch err
-        return JSONRPC.JSONRPCError(-32600, "Something went wrong in the eval.", nothing)
+        return JSONRPC.JSONRPCError(-32600, string("Something went wrong in the eval: ", sprint(showerror, err)), nothing)
     end
 
     var_ref = state.varrefs[varref_id]
@@ -793,7 +793,7 @@ function set_variable_request(conn, state::DebuggerState, params::SetVariableArg
 
             return SetVariableResponseArguments(s.value, s.type, s.variablesReference, s.namedVariables, s.indexedVariables)
         catch err
-            return JSONRPC.JSONRPCError(-32600, "Something went wrong while setting the variable: $err", nothing)
+            return JSONRPC.JSONRPCError(-32600, string("Something went wrong while setting the variable: ", sprint(showerror, err)), nothing)
         end
     elseif var_ref.kind == :var
         if isnumeric(var_name[1])
@@ -801,7 +801,7 @@ function set_variable_request(conn, state::DebuggerState, params::SetVariableArg
                 new_val = try
                     Core.eval(Main, val_parsed)
                 catch err
-                    return JSONRPC.JSONRPCError(-32600, "Expression cannot be evaluated.", nothing)
+                    return JSONRPC.JSONRPCError(-32600, string("Expression could not be evaluated: ", sprint(showerror, err)), nothing)
                 end
 
                 idx = Core.eval(Main, Meta.parse("($var_name)"))
@@ -822,7 +822,7 @@ function set_variable_request(conn, state::DebuggerState, params::SetVariableArg
                     new_val = try
                         Core.eval(Main, val_parsed)
                     catch err
-                        return JSONRPC.JSONRPCError(-32600, "Expression cannot be evaluated.", nothing)
+                        return JSONRPC.JSONRPCError(-32600, string("Expression could not be evaluated: ", sprint(showerror, err)), nothing)
                     end
 
                     setfield!(var_ref.value, Symbol(var_name), new_val)
@@ -831,7 +831,7 @@ function set_variable_request(conn, state::DebuggerState, params::SetVariableArg
 
                     return SetVariableResponseArguments(s.value, s.type, s.variablesReference, s.namedVariables, s.indexedVariables)
                 catch err
-                    return JSONRPC.JSONRPCError(-32600, "Something went wrong while setting the variable: $err", nothing)
+                    return JSONRPC.JSONRPCError(-32600, string("Something went wrong while setting the variable: ", sprint(showerror, err)), nothing)
                 end
             end
         end
@@ -851,13 +851,13 @@ function set_variable_request(conn, state::DebuggerState, params::SetVariableArg
         new_val = try
             mod.eval(Meta.parse("$var_name = $var_value"))
         catch err
-            return JSONRPC.JSONRPCError(-32600, "Something went wrong while setting the variable: $err", nothing)
+            return JSONRPC.JSONRPCError(-32600, string("Something went wrong while setting the variable: ", sprint(showerror, err)), nothing)
         end
         s = construct_return_msg_for_var(state::DebuggerState, "", new_val)
 
         return SetVariableResponseArguments(s.value, s.type, s.variablesReference, s.namedVariables, s.indexedVariables)
     else
-        error("Unknown var ref type.")
+        return JSONRPC.JSONRPCError(-32600, "Unknown variable ref type.", nothing)
     end
 end
 
@@ -887,7 +887,7 @@ function restart_frame_request(conn, state::DebuggerState, params::RestartFrameA
 
     put!(state.next_cmd, (cmd = :continue,))
 
-    return nothing # RestartFrameResponseResponseArguments()
+    return RestartFrameResponseResponseArguments()
 end
 
 function exception_info_request(conn, state::DebuggerState, params::ExceptionInfoArguments)
@@ -919,7 +919,7 @@ function evaluate_request(conn, state::DebuggerState, params::EvaluateArguments)
 
         return EvaluateResponseArguments(Base.invokelatest(repr, ret_val), missing, missing, 0, missing, missing, missing)
     catch err
-        return EvaluateResponseArguments("#error", missing, missing, 0, missing, missing, missing)
+        return EvaluateResponseArguments(string("Internal Error: ", sprint(showerror, err)), missing, missing, 0, missing, missing, missing)
     end
 end
 
@@ -928,7 +928,7 @@ end
 
     put!(state.next_cmd, (cmd = :continue,))
 
-    return nothing # ContinueResponseArguments()
+    return ContinueResponseArguments()
 end
 
 function next_request(conn, state::DebuggerState, params::NextArguments)
@@ -936,7 +936,7 @@ function next_request(conn, state::DebuggerState, params::NextArguments)
 
     put!(state.next_cmd, (cmd = :next,))
 
-    return nothing # NextResponseArguments()
+    return NextResponseArguments()
 end
 
 function setp_in_request(conn, state::DebuggerState, params::StepInArguments)
@@ -944,7 +944,7 @@ function setp_in_request(conn, state::DebuggerState, params::StepInArguments)
 
     put!(state.next_cmd, (cmd = :stepIn, targetId = params.targetId))
 
-    return nothing # StepInResponseArguments()
+    return StepInResponseArguments()
 end
 
 function step_in_targets_request(conn, state::DebuggerState, params::StepInTargetsArguments)
@@ -962,7 +962,7 @@ function setp_out_request(conn, state::DebuggerState, params::StepOutArguments)
 
     put!(state.next_cmd, (cmd = :stepOut,))
 
-    return nothing # StepOutResponseArguments()
+    return StepOutResponseArguments()
 end
 
 function disconnect_request(conn, state::DebuggerState, params::DisconnectArguments)
@@ -970,7 +970,7 @@ function disconnect_request(conn, state::DebuggerState, params::DisconnectArgume
 
     put!(state.next_cmd, (cmd = :stop,))
 
-    return nothing # DisconnectResponseArguments()
+    return DisconnectResponseArguments()
 end
 
 function terminate_request(conn, state::DebuggerState, params::TerminateArguments)
@@ -979,7 +979,7 @@ function terminate_request(conn, state::DebuggerState, params::TerminateArgument
     JSONRPC.send(conn, finished_notification_type, nothing)
     put!(state.next_cmd, (cmd = :stop,))
 
-    return nothing # TerminateResponseArguments()
+    return TerminateResponseArguments()
 end
 
 function threads_request(conn, state::DebuggerState, params::Nothing)

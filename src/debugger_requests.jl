@@ -928,7 +928,7 @@ end
 
     put!(state.next_cmd, (cmd = :continue,))
 
-    return ContinueResponseArguments()
+    return ContinueResponseArguments(true)
 end
 
 function next_request(conn, state::DebuggerState, params::NextArguments)

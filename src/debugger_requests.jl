@@ -199,7 +199,7 @@ function get_obj_by_accessor(accessor, super = nothing)
         if isdefined(super, Symbol(top))
             this = getfield(super, Symbol(top))
             if length(parts) > 0
-                if this isa Module
+                if this isa Base.Module
                     return get_obj_by_accessor(join(parts, '.'), this)
                 end
             else

@@ -56,7 +56,7 @@ end
     urlLabel::Union{Missing,String}
 end
 
-@dict_readable struct Module <: Outbound
+@dict_readable struct DAModule <: Outbound
     id::Union{Int,String}
     name::String
     path::Union{Missing,String}

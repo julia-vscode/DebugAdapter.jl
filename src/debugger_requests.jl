@@ -116,6 +116,8 @@ function set_compiled_functions_modules!(items::Vector{String})
 
     @debug "setting as compiled" items = items
 
+    remove_later_modules = Module[]
+
     # user wants these compiled:
     for acc in items
         is_interpreted = startswith(acc, '-') && length(acc) > 1
@@ -131,18 +133,22 @@ function set_compiled_functions_modules!(items::Vector{String})
             continue
         end
 
-        if is_interpreted && obj isa Base.Callable
-            try
-                for m in methods(Base.unwrap_unionall(obj))
-                    push!(JuliaInterpreter.interpreted_methods, m)
+        if is_interpreted
+            if obj isa Base.Callable
+                try
+                    for m in methods(Base.unwrap_unionall(obj))
+                        push!(JuliaInterpreter.interpreted_methods, m)
+                    end
+                    continue
+                catch err
+                    @warn "Setting $obj as an interpreted method failed."
                 end
-                continue
-            catch err
-                @warn "Setting $obj as an interpreted method failed."
+            elseif obj isa Module
+                push!(remove_later_modules, obj)
             end
         end
 
-        if obj isa Base.Module
+        if obj isa Module
             push!(JuliaInterpreter.compiled_modules, obj)
             if all_submodules
                 compile_mode_for_all_submodules(obj)
@@ -152,6 +158,10 @@ function set_compiled_functions_modules!(items::Vector{String})
                 push!(JuliaInterpreter.compiled_methods, m)
             end
         end
+    end
+
+    for mod in remove_later_modules
+        delete!(JuliaInterpreter.compiled_modules, mod)
     end
 
     @debug "could not set as compiled" unset = unset
@@ -169,7 +179,7 @@ function compile_mode_for_all_submodules(mod, seen = Set())
     for name in names(mod; all = true)
         if isdefined(mod, name)
             obj = getfield(mod, name)
-            if obj !== mod && obj isa Base.Module && !(obj in seen)
+            if obj !== mod && obj isa Module && !(obj in seen)
                 push!(seen, obj)
                 push!(JuliaInterpreter.compiled_modules, obj)
                 compile_mode_for_all_submodules(obj, seen)
@@ -199,7 +209,7 @@ function get_obj_by_accessor(accessor, super = nothing)
         if isdefined(super, Symbol(top))
             this = getfield(super, Symbol(top))
             if length(parts) > 0
-                if this isa Base.Module
+                if this isa Module
                     return get_obj_by_accessor(join(parts, '.'), this)
                 end
             else
@@ -696,7 +706,7 @@ function variables_request(conn, state::DebuggerState, params::VariablesArgument
                     0,
                     missing
                 ))
-            elseif var_ref.value isa Base.Module
+            elseif var_ref.value isa Module
                 push_module_names!(variables, state, var_ref.value)
             else
                 for i = Iterators.take(Iterators.drop(1:fieldcount(container_type), skip_count), take_count)
@@ -838,13 +848,13 @@ function set_variable_request(conn, state::DebuggerState, params::SetVariableArg
     elseif var_ref.kind == :scope_globals || var_ref.kind == :module
         mod = if var_ref.value isa JuliaInterpreter.Frame
             JuliaInterpreter.moduleof(var_ref.value)
-        elseif var_ref.value isa Base.Module
+        elseif var_ref.value isa Module
             var_ref.value
         else
             return JSONRPC.JSONRPCError(-32600, "No module attached to this global variable.", nothing)
         end
 
-        if !(mod isa Base.Module)
+        if !(mod isa Module)
             return JSONRPC.JSONRPCError(-32600, "Can't determine the module this variable is defined in.", nothing)
         end
 

@@ -45,7 +45,7 @@ end
 
 @dict_readable struct ModuleEventArguments <: Outbound
     reason::String
-    mod::Module
+    mod::DAModule
 end
 
 @dict_readable struct LoadedSourceEventArguments <: Outbound

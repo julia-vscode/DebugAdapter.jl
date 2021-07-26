@@ -543,7 +543,11 @@ end
 
 function construct_return_msg_for_var(state::DebuggerState, name, value)
     v_type = typeof(value)
-    v_value_as_string = Base.invokelatest(repr, value)
+    v_value_as_string = try
+        Base.invokelatest(repr, value)
+    catch err
+        "Error while showing this value."
+    end
 
     if (isstructtype(v_type) || value isa AbstractArray || value isa AbstractDict) && !(value isa String || value isa Symbol)
         push!(state.varrefs, VariableReference(:var, value))
@@ -737,7 +741,11 @@ function variables_request(conn, state::DebuggerState, params::VariablesArgument
                 end
             elseif var_ref.value isa AbstractDict
                 for i in Base.invokelatest(get_keys_with_drop_take, var_ref.value, skip_count, take_count)
-                    key_as_string = Base.invokelatest(repr, i)
+                    key_as_string = try
+                        Base.invokelatest(repr, i)
+                    catch err
+                        "Error while showing this value."
+                    end
                     s = ""
                     try
                         val = Base.invokelatest(getindex, var_ref.value, i)

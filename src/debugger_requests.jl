@@ -912,7 +912,11 @@ function exception_info_request(conn, state::DebuggerState, params::ExceptionInf
     exception_id = string(typeof(state.last_exception))
     exception_description = sprint(Base.showerror, state.last_exception)
 
-    exception_stacktrace = sprint(Base.show_backtrace, state.frame)
+    exception_stacktrace = try
+        Base.invokelatest(sprint, Base.show_backtrace, state.frame)
+    catch err
+        "Error while printing the backtrace."
+    end
 
     return ExceptionInfoResponseArguments(exception_id, exception_description, "userUnhandled", ExceptionDetails(missing, missing, missing, missing, exception_stacktrace, missing))
 end

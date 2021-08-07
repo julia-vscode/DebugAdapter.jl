@@ -69,7 +69,7 @@ function our_debug_command(cmd, state)
         state.not_yet_set_compiled_items = set_compiled_functions_modules!(state.not_yet_set_compiled_items)
         attempt_to_set_f_breakpoints!(state.not_yet_set_function_breakpoints)
 
-        @debug "Finished running frame." ret
+        @debug "Finished running frame."
 
         if ret !== nothing && is_toplevel_return(ret[1])
             ret = nothing

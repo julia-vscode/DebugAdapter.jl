@@ -561,11 +561,11 @@ function construct_return_msg_for_var(state::DebuggerState, name, value)
             fieldcount(v_type)
         end
 
-        indexed_count = 0
+        indexed_count = zero(Int64)
 
         if value isa AbstractArray || value isa AbstractDict || value isa Tuple
             try
-                indexed_count = Int(Base.invokelatest(length, value))
+                indexed_count = Int64(Base.invokelatest(length, value))
             catch err
             end
         end

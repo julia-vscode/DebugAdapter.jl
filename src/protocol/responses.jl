@@ -98,7 +98,7 @@ end
     type::Union{Missing,String}
     variablesReference::Union{Missing,Int}
     namedVariables::Union{Missing,Int}
-    indexedVariables::Union{Missing,Int}
+    indexedVariables::Union{Missing,Int64}
 end
 
 @dict_readable struct SourceResponseArguments <: Outbound
@@ -128,7 +128,7 @@ end
     presentationHint::Union{Missing,VariablePresentationHint}
     variablesReference::Int
     namedVariables::Union{Missing,Int}
-    indexedVariables::Union{Missing,Int}
+    indexedVariables::Union{Missing,Int64}
     memoryReference::Union{Missing,String}
 end
 
@@ -138,7 +138,7 @@ end
     presentationHint::Union{Missing,VariablePresentationHint}
     variablesReference::Int
     namedVariables::Union{Missing,Int}
-    indexedVariables::Union{Missing,Int}
+    indexedVariables::Union{Missing,Int64}
 end
 
 @dict_readable struct StepInTargetsResponseArguments <: Outbound

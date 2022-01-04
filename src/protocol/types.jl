@@ -111,7 +111,7 @@ end
     presentationHint::Union{Missing,String}
     variablesReference::Int
     namedVariables::Union{Missing,Int}
-    indexedVariables::Union{Missing,Int}
+    indexedVariables::Union{Missing,Int64}
     expensive::Bool
     source::Union{Missing,Source}
     line::Union{Missing,Int}
@@ -134,7 +134,7 @@ end
     evaluateName::Union{Missing,String}
     variablesReference::Int
     namedVariables::Union{Missing,Int}
-    indexedVariables::Union{Missing,Int}
+    indexedVariables::Union{Missing,Int64}
     memoryReference::Union{Missing,String}
 end
 

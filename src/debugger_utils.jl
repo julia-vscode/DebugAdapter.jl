@@ -95,3 +95,40 @@ function calls_in_frame(frame::JuliaInterpreter.Frame)
     end
     exprs
 end
+
+mutable struct LimitIO{IO_t<:IO} <: IO
+    io::IO_t
+    maxbytes::Int
+    n::Int
+end
+LimitIO(io::IO, maxbytes) = LimitIO(io, maxbytes, 0)
+
+struct LimitIOException <: Exception end
+
+function Base.write(io::LimitIO, v::UInt8)
+    io.n > io.maxbytes && throw(LimitIOException())
+    io.n += write(io.io, v)
+end
+
+function remove_ansi_control_chars(str::String)
+    replace(str, r"(\x9B|\x1B\[)[0-?]*[ -\/]*[@-~]" => "")
+end
+
+function sprintlimited(args...; func = show, limit::Int = 1000, ellipsis::AbstractString = "…", color = false)
+    io = IOBuffer()
+    ioctx = IOContext(LimitIO(io, limit - length(ellipsis)), :limit => true, :color => color, :displaysize => (30, 64))
+
+    try
+        Base.invokelatest(func, ioctx, args...)
+    catch err
+        if err isa LimitIOException
+            print(io, ellipsis)
+        else
+            rethrow(err)
+        end
+    end
+
+    str = filter(isvalid, String(take!(io)))
+
+    return color ? str : remove_ansi_control_chars(str)
+end

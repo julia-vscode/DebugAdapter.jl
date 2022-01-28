@@ -4,8 +4,8 @@ function run_notification(conn, state::DebuggerState, params::NamedTuple{(:progr
     @debug "run_request"
 
     state.debug_mode = :launch
-
-    put!(state.next_cmd, (cmd = :run, program = params.program))
+    filename_to_debug = isabspath(params.program) ? params.program : joinpath(pwd(), params.program)
+    put!(state.next_cmd, (cmd = :run, program = filename_to_debug))
 end
 
 function debug_notification(conn, state::DebuggerState, params::DebugArguments)
@@ -13,7 +13,7 @@ function debug_notification(conn, state::DebuggerState, params::DebugArguments)
 
     state.debug_mode = :launch
 
-    filename_to_debug = params.program
+    filename_to_debug = isabspath(params.program) ? params.program : joinpath(pwd(), params.program)
 
     @debug "We are debugging the file $filename_to_debug."
 

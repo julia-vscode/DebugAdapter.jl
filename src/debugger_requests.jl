@@ -553,8 +553,9 @@ end
 function construct_return_msg_for_var(state::DebuggerState, name, value)
     v_type = typeof(value)
     v_value_as_string = try
-        Base.invokelatest(repr, value)
+        Base.invokelatest(sprintlimited, value)
     catch err
+        @debug "error showing value" exception=(err, catch_backtrace())
         "Error while showing this value."
     end
 
@@ -948,8 +949,9 @@ function evaluate_request(conn, state::DebuggerState, params::EvaluateArguments)
     try
         ret_val = JuliaInterpreter.eval_code(curr_fr, params.expression)
 
-        return EvaluateResponseArguments(Base.invokelatest(repr, ret_val), missing, missing, 0, missing, missing, missing)
+        return EvaluateResponseArguments(Base.invokelatest(sprintlimited, ret_val), missing, missing, 0, missing, missing, missing)
     catch err
+        @debug "error showing value" exception=(err, catch_backtrace())
         return EvaluateResponseArguments(string("Internal Error: ", sprint(showerror, err)), missing, missing, 0, missing, missing, missing)
     end
 end

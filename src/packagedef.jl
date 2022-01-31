@@ -110,7 +110,6 @@ function startdebug(socket, error_handler=nothing)
                         if msg.targetId === missing
                             ret = our_debug_command(:s, state)
                         else
-                            pc = state.frame.pc
                             itr = 0
                             success = true
                             while state.frame.pc < msg.targetId

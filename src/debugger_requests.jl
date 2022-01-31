@@ -336,6 +336,13 @@ function set_function_break_points_request(conn, state::DebuggerState, params::S
     return SetFunctionBreakpointsResponseArguments([Breakpoint(true) for i = 1:length(bps)])
 end
 
+function sfHint(frame, meth_or_mod_name)
+    if endswith(meth_or_mod_name, "#kw")
+        return "subtle"
+    end
+    return missing
+end
+
 function stack_trace_request(conn, state::DebuggerState, params::StackTraceArguments)
     @debug "getstacktrace_request"
 
@@ -349,34 +356,36 @@ function stack_trace_request(conn, state::DebuggerState, params::StackTraceArgum
 
     curr_fr = JuliaInterpreter.leaf(fr)
 
-    frames_as_string = String[]
-
     id = 1
     while curr_fr !== nothing
         curr_scopeof = JuliaInterpreter.scopeof(curr_fr)
         curr_whereis = JuliaInterpreter.whereis(curr_fr)
+        curr_mod = JuliaInterpreter.moduleof(curr_fr)
 
         file_name = curr_whereis[1]
         lineno = curr_whereis[2]
-        meth_or_mod_name = Base.nameof(curr_fr)
+        meth_or_mod_name = string(Base.nameof(curr_fr))
 
         # Is this a file from base?
         if !isabspath(file_name)
             file_name = basepath(file_name)
         end
 
+        sf_hint = sfHint(fr, meth_or_mod_name)
+        source_hint, source_origin = missing, missing # could try to de-emphasize certain sources in the future
+
         if isfile(file_name)
             push!(
                 frames,
                 StackFrame(
                     id,
-                    string(meth_or_mod_name),
+                    meth_or_mod_name,
                     Source(
                         basename(file_name),
                         file_name,
                         missing,
-                        missing,
-                        "julia-adapter-data",
+                        source_hint,
+                        source_origin,
                         missing,
                         missing,
                         missing
@@ -387,7 +396,7 @@ function stack_trace_request(conn, state::DebuggerState, params::StackTraceArgum
                     missing,
                     missing,
                     missing,
-                    missing
+                    sf_hint
                 )
             )
         elseif curr_scopeof isa Method
@@ -398,13 +407,13 @@ function stack_trace_request(conn, state::DebuggerState, params::StackTraceArgum
                     frames,
                     StackFrame(
                         id,
-                        string(meth_or_mod_name),
+                        meth_or_mod_name,
                         Source(
                             file_name,
                             missing,
                             state.next_source_id,
-                            missing,
-                            missing,
+                            source_hint,
+                            source_origin,
                             missing,
                             missing,
                             missing
@@ -415,7 +424,7 @@ function stack_trace_request(conn, state::DebuggerState, params::StackTraceArgum
                         missing,
                         missing,
                         missing,
-                        missing
+                        sf_hint
                     )
                 )
                 state.next_source_id += 1
@@ -431,13 +440,13 @@ function stack_trace_request(conn, state::DebuggerState, params::StackTraceArgum
                     frames,
                     StackFrame(
                         id,
-                        string(meth_or_mod_name),
+                        meth_or_mod_name,
                         Source(
                             file_name,
                             missing,
                             state.next_source_id,
-                            missing,
-                            missing,
+                            source_hint,
+                            source_origin,
                             missing,
                             missing,
                             missing
@@ -448,7 +457,7 @@ function stack_trace_request(conn, state::DebuggerState, params::StackTraceArgum
                         missing,
                         missing,
                         missing,
-                        missing
+                        sf_hint
                     )
                 )
                 state.next_source_id += 1
@@ -461,7 +470,7 @@ function stack_trace_request(conn, state::DebuggerState, params::StackTraceArgum
                     frames,
                     StackFrame(
                         id,
-                        string(meth_or_mod_name),
+                        meth_or_mod_name,
                         Source(
                             "REPL",
                             missing,

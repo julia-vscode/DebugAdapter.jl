@@ -350,7 +350,7 @@ function stack_trace_request(conn, state::DebuggerState, params::StackTraceArgum
     fr = state.frame
 
     if fr === nothing
-        @info fr
+        @debug fr
         return StackTraceResponseArguments(frames, length(frames))
     end
 
@@ -430,7 +430,7 @@ function stack_trace_request(conn, state::DebuggerState, params::StackTraceArgum
                 state.next_source_id += 1
             else
                 src = curr_fr.framecode.src
-                src = JuliaInterpreter.copy_codeinfo(src)
+                src = copy(src)
                 JuliaInterpreter.replace_coretypes!(src; rev = true)
                 code = Base.invokelatest(JuliaInterpreter.framecode_lines, src)
 

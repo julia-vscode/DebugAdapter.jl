@@ -430,7 +430,11 @@ function stack_trace_request(conn, state::DebuggerState, params::StackTraceArgum
                 state.next_source_id += 1
             else
                 src = curr_fr.framecode.src
-                src = copy(src)
+                @static if isdefined(JuliaInterpreter, :copy_codeinfo)
+                    src = JuliaInterpreter.copy_codeinfo(src)
+                else
+                    src = copy(src)
+                end
                 JuliaInterpreter.replace_coretypes!(src; rev = true)
                 code = Base.invokelatest(JuliaInterpreter.framecode_lines, src)
 

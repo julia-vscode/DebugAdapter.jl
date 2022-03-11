@@ -225,9 +225,12 @@ function set_break_points_request(conn, state::DebuggerState, params::SetBreakpo
 
     file = params.source.path
 
-    for bp in JuliaInterpreter.breakpoints()
+    # JuliaInterpreter.remove mutates the vector returned by
+    # breakpoints(), so we make a copy to not mess up iteration
+    for bp in copy(JuliaInterpreter.breakpoints())
         if bp isa JuliaInterpreter.BreakpointFileLocation
             if bp.path == file
+                @debug "Removing breakpoint at $(bp.path):$(bp.line)"
                 JuliaInterpreter.remove(bp)
             end
         end
@@ -237,11 +240,11 @@ function set_break_points_request(conn, state::DebuggerState, params::SetBreakpo
         condition = bp.condition === missing ? nothing : try
             Meta.parse(bp.condition)
         catch err
-            @debug "invalid condition: `$(bp.condition)`. falling back to always breaking." exception = err
+            @debug "Invalid BP condition: `$(bp.condition)`. Falling back to always breaking." exception = err
             nothing
         end
 
-        @debug "Setting one breakpoint at line $(bp.line) with condition $(condition) in file $file."
+        @debug "Setting breakpoint at $(file):$(bp.line) (condition $(condition))"
         JuliaInterpreter.breakpoint(file, bp.line, condition)
     end
 

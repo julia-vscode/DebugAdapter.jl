@@ -100,7 +100,11 @@ function send_stopped_msg(conn, ret_val, state)
             JSONRPC.send(conn, stopped_notification_type, StoppedEventArguments("breakpoint", missing, 1, missing, missing, missing))
         else
             state.last_exception = ret_val.err
-            error_msg = Base.invokelatest(string, ret_val.err)
+            error_msg = try
+                Base.invokelatest(sprint, Base.showerror, ret_val.err)
+            catch err
+                "Error while displaying the original error."
+            end
             JSONRPC.send(conn, stopped_notification_type, StoppedEventArguments("exception", missing, 1, missing, error_msg, missing))
         end
     elseif ret_val isa Number

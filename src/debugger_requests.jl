@@ -740,48 +740,62 @@ function variables_request(conn, state::DebuggerState, params::VariablesArgument
         end
 
         if (filter_type == "" || filter_type == "indexed")
-            if var_ref.value isa Tuple
-                for i in Iterators.take(Iterators.drop(1:length(var_ref.value), skip_count), take_count)
-                    s = construct_return_msg_for_var(state, join(string.(i), ','), var_ref.value[i])
-                    push!(variables, s)
-                end
-            elseif var_ref.value isa AbstractArray
-                for i in Base.invokelatest(get_cartesian_with_drop_take, var_ref.value, skip_count, take_count)
-                    s = ""
-                    try
-                        val = Base.invokelatest(getindex, var_ref.value, i)
-                        s = construct_return_msg_for_var(state, join(string.(i.I), ','), val)
-                    catch err
-                        s = Variable(name = join(string.(i.I), ','), type = "", value = "#error", variablesReference = 0)
+            try
+                if var_ref.value isa Tuple
+                    for i in Iterators.take(Iterators.drop(1:length(var_ref.value), skip_count), take_count)
+                        s = construct_return_msg_for_var(state, join(string.(i), ','), var_ref.value[i])
+                        push!(variables, s)
                     end
-                    push!(variables, s)
-                end
-            elseif var_ref.value isa AbstractDict
-                for i in Base.invokelatest(get_keys_with_drop_take, var_ref.value, skip_count, take_count)
-                    key_as_string = try
-                        Base.invokelatest(repr, i)
-                    catch err
-                        "Error while showing this value."
+                elseif var_ref.value isa AbstractArray
+                    for i in Base.invokelatest(get_cartesian_with_drop_take, var_ref.value, skip_count, take_count)
+                        s = ""
+                        try
+                            val = Base.invokelatest(getindex, var_ref.value, i)
+                            s = construct_return_msg_for_var(state, join(string.(i.I), ','), val)
+                        catch err
+                            s = Variable(name = join(string.(i.I), ','), type = "", value = "#error", variablesReference = 0)
+                        end
+                        push!(variables, s)
                     end
-                    s = ""
-                    try
-                        val = Base.invokelatest(getindex, var_ref.value, i)
-                        s = construct_return_msg_for_var(state, key_as_string, val)
-                    catch err
-                        s = Variable(
-                            join(string.(i.I), ','),
-                            "#error",
-                            "",
-                            missing,
-                            missing,
-                            0,
-                            0,
-                            0,
-                            missing
-                        )
+                elseif var_ref.value isa AbstractDict
+                    for i in Base.invokelatest(get_keys_with_drop_take, var_ref.value, skip_count, take_count)
+                        key_as_string = try
+                            Base.invokelatest(repr, i)
+                        catch err
+                            "Error while showing this value."
+                        end
+                        s = ""
+                        try
+                            val = Base.invokelatest(getindex, var_ref.value, i)
+                            s = construct_return_msg_for_var(state, key_as_string, val)
+                        catch err
+                            s = Variable(
+                                join(string.(i.I), ','),
+                                "#error",
+                                "",
+                                missing,
+                                missing,
+                                0,
+                                0,
+                                0,
+                                missing
+                            )
+                        end
+                        push!(variables, s)
                     end
-                    push!(variables, s)
                 end
+            catch err
+                push!(variables, Variable(
+                    "#error",
+                    "This type doesn't implement the expected interface",
+                    "",
+                    missing,
+                    missing,
+                    0,
+                    0,
+                    0,
+                    missing
+                ))
             end
         end
     elseif var_ref.kind == :fields
@@ -927,7 +941,7 @@ end
 
 function exception_info_request(conn, state::DebuggerState, params::ExceptionInfoArguments)
     exception_id = string(typeof(state.last_exception))
-    exception_description = sprint(Base.showerror, state.last_exception)
+    exception_description = Base.invokelatest(sprint, Base.showerror, state.last_exception)
 
     exception_stacktrace = try
         Base.invokelatest(sprint, Base.show_backtrace, state.frame)

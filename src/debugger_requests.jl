@@ -17,39 +17,47 @@ function debug_notification(conn, state::DebuggerState, params::DebugArguments)
 
     @debug "We are debugging the file $filename_to_debug."
 
-    put!(state.next_cmd, (cmd = :set_source_path, source_path = filename_to_debug))
+    put!(state.next_cmd, (cmd=:set_source_path, source_path=filename_to_debug))
 
     file_content = try
         read(filename_to_debug, String)
     catch err
         # TODO Think about some way to return an error message in the UI
         JSONRPC.send(conn, finished_notification_type, nothing)
-        put!(state.next_cmd, (cmd = :stop,))
+        put!(state.next_cmd, (cmd=:stop,))
         return
     end
 
-    ex = Base.parse_input_line(file_content; filename = filename_to_debug)
+    ex = Base.parse_input_line(file_content; filename=filename_to_debug)
 
     # handle a case when lowering fails
     if !is_valid_expression(ex)
         # TODO Think about some way to return an error message in the UI
         JSONRPC.send(conn, finished_notification_type, nothing)
-        put!(state.next_cmd, (cmd = :stop,))
+        put!(state.next_cmd, (cmd=:stop,))
         return
     end
 
-    params.compiledModulesOrFunctions !== missing && set_compiled_items_request(conn, state, (compiledModulesOrFunctions = params.compiledModulesOrFunctions,))
-    params.compiledMode !== missing && set_compiled_mode_request(conn, state, (compiledMode = params.compiledMode,))
+    params.compiledModulesOrFunctions !== missing && set_compiled_items_request(conn, state, (compiledModulesOrFunctions=params.compiledModulesOrFunctions,))
+    params.compiledMode !== missing && set_compiled_mode_request(conn, state, (compiledMode=params.compiledMode,))
 
     state.expr_splitter = JuliaInterpreter.ExprSplitter(Main, ex)
-    state.frame = get_next_top_level_frame(state)
+    next_frame = get_next_top_level_frame(state)
+
+    if next_frame === nothing
+        JSONRPC.send(conn, finished_notification_type, nothing)
+        put!(state.next_cmd, (cmd=:stop,))
+        return
+    end
+
+    state.frame = next_frame
 
     if params.stopOnEntry
         JSONRPC.send(conn, stopped_notification_type, StoppedEventArguments("entry", missing, 1, missing, missing, missing))
     elseif JuliaInterpreter.shouldbreak(state.frame, state.frame.pc)
         JSONRPC.send(conn, stopped_notification_type, StoppedEventArguments("breakpoint", missing, 1, missing, missing, missing))
     else
-        put!(state.next_cmd, (cmd = :continue,))
+        put!(state.next_cmd, (cmd=:continue,))
     end
 end
 

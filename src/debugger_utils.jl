@@ -34,19 +34,19 @@ function calls_on_line(frame::JuliaInterpreter.Frame, line=nothing)
             return exprs
         end
 
-        expr = copy(JuliaInterpreter.pc_expr(src, pc))
-        expr.args = copy(expr.args)
+        expr = JuliaInterpreter.pc_expr(src, pc)
         if Meta.isexpr(expr, :call)
-            for i in 1:length(expr.args)
-                expr.args[i] = maybe_quote(expr.args[i])
+            new_expr = Expr(:call)
+            for arg in expr.args
+                push!(new_expr.args, maybe_quote(arg))
             end
-            push!(exprs, (pc = pc, expr = string("%", pc, " = ", prettyprint_expr(expr, src))))
+            push!(exprs, (pc = pc, expr = string("%", pc, " = ", prettyprint_expr(new_expr, src))))
         elseif Meta.isexpr(expr, :(=))
-            expr = expr.args[2]
-            push!(exprs, (pc = pc, expr = prettyprint_expr(expr, src)))
+            push!(exprs, (pc = pc, expr = prettyprint_expr(expr.args[2], src)))
         end
     end
-    exprs
+
+    return exprs
 end
 
 function prettyprint_expr(expr, src)

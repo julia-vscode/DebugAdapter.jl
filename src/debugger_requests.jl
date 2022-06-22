@@ -128,6 +128,15 @@ function set_compiled_functions_modules!(items::Vector{String})
 
     # user wants these compiled:
     for acc in items
+        if acc == "ALL_MODULES_EXCEPT_MAIN"
+            for mod in values(Base.loaded_modules)
+                if mod != Main
+                    push!(JuliaInterpreter.compiled_modules, mod)
+                end
+            end
+            push!(unset, acc)
+            continue
+        end
         is_interpreted = startswith(acc, '-') && length(acc) > 1
         if is_interpreted
             acc = acc[2:end]

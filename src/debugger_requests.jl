@@ -132,6 +132,7 @@ function set_compiled_functions_modules!(items::Vector{String})
             for mod in values(Base.loaded_modules)
                 if mod != Main
                     push!(JuliaInterpreter.compiled_modules, mod)
+                    compile_mode_for_all_submodules(mod)
                 end
             end
             push!(unset, acc)

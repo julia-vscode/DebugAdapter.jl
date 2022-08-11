@@ -131,8 +131,9 @@ function set_compiled_functions_modules!(items::Vector{String})
         if acc == "ALL_MODULES_EXCEPT_MAIN"
             for mod in values(Base.loaded_modules)
                 if mod != Main
+                    @debug "setting $mod and submodules as compiled via ALL_MODULES_EXCEPT_MAIN"
                     push!(JuliaInterpreter.compiled_modules, mod)
-                    compile_mode_for_all_submodules(mod)
+                    compile_mode_for_all_submodules(mod, Set([Main]))
                 end
             end
             push!(unset, acc)

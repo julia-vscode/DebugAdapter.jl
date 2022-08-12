@@ -124,7 +124,7 @@ function set_compiled_functions_modules!(items::Vector{String})
 
     @debug "setting as compiled" items = items
 
-    remove_later_modules = Module[]
+    remove_later_modules = Set(Module[])
 
     # user wants these compiled:
     for acc in items
@@ -139,6 +139,7 @@ function set_compiled_functions_modules!(items::Vector{String})
             push!(unset, acc)
             continue
         end
+        oacc = acc
         is_interpreted = startswith(acc, '-') && length(acc) > 1
         if is_interpreted
             acc = acc[2:end]
@@ -148,7 +149,7 @@ function set_compiled_functions_modules!(items::Vector{String})
         obj = get_obj_by_accessor(acc)
 
         if obj === nothing
-            push!(unset, acc)
+            push!(unset, oacc)
             continue
         end
 
@@ -164,6 +165,9 @@ function set_compiled_functions_modules!(items::Vector{String})
                 end
             elseif obj isa Module
                 push!(remove_later_modules, obj)
+                # need to push this into unset because of ALL_MODULES_EXCEPT_MAIN
+                # being re-applied every time
+                push!(unset, oacc)
             end
         end
 
@@ -179,11 +183,13 @@ function set_compiled_functions_modules!(items::Vector{String})
         end
     end
 
+    @debug "remove_later_modules:"
     for mod in remove_later_modules
+        @debug "deleting $mod from compiled_modules"
         delete!(JuliaInterpreter.compiled_modules, mod)
     end
 
-    @debug "could not set as compiled" unset = unset
+    @debug "remaining items" unset = unset
     return unset
 end
 

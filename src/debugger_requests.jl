@@ -148,7 +148,7 @@ function set_compiled_functions_modules!(items::Vector{String})
         obj = get_obj_by_accessor(acc)
 
         if obj === nothing
-            push!(unset, acc)
+            push!(unset, oacc)
             continue
         end
 

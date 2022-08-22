@@ -124,7 +124,13 @@ function set_compiled_functions_modules!(items::Vector{String})
 
     @debug "setting as compiled" items = items
 
-    remove_later_modules = Set(Module[])
+    # sort inputs once so that removed items are at the end
+    sort!(items, lt = function (a, b)
+        am = startswith(a, '-')
+        bm = startswith(b, '-')
+
+        return am == bm ? isless(a, b) : bm
+    end)
 
     # user wants these compiled:
     for acc in items
@@ -133,7 +139,7 @@ function set_compiled_functions_modules!(items::Vector{String})
                 if mod != Main
                     @debug "setting $mod and submodules as compiled via ALL_MODULES_EXCEPT_MAIN"
                     push!(JuliaInterpreter.compiled_modules, mod)
-                    compile_mode_for_all_submodules(mod, Set([Main]))
+                    toggle_mode_for_all_submodules(mod, true, Set([Main]))
                 end
             end
             push!(unset, acc)
@@ -159,34 +165,34 @@ function set_compiled_functions_modules!(items::Vector{String})
                     for m in methods(Base.unwrap_unionall(obj))
                         push!(JuliaInterpreter.interpreted_methods, m)
                     end
-                    continue
                 catch err
                     @warn "Setting $obj as an interpreted method failed."
                 end
             elseif obj isa Module
-                push!(remove_later_modules, obj)
-                # need to push this into unset because of ALL_MODULES_EXCEPT_MAIN
+                delete!(JuliaInterpreter.compiled_modules, obj)
+                if all_submodules
+                    toggle_mode_for_all_submodules(obj, false)
+                end
+                # need to push these into unset because of ALL_MODULES_EXCEPT_MAIN
                 # being re-applied every time
                 push!(unset, oacc)
             end
-        end
-
-        if obj isa Module
-            push!(JuliaInterpreter.compiled_modules, obj)
-            if all_submodules
-                compile_mode_for_all_submodules(obj)
+        else
+            if obj isa Base.Callable
+                try
+                    for m in methods(Base.unwrap_unionall(obj))
+                        push!(JuliaInterpreter.compiled_methods, m)
+                    end
+                catch err
+                    @warn "Setting $obj as an interpreted method failed."
+                end
+            elseif obj isa Module
+                push!(JuliaInterpreter.compiled_modules, obj)
+                if all_submodules
+                    toggle_mode_for_all_submodules(obj, true)
+                end
             end
-        elseif obj isa Base.Callable
-            for m in methods(Base.unwrap_unionall(obj))
-                push!(JuliaInterpreter.compiled_methods, m)
-            end
         end
-    end
-
-    @debug "remove_later_modules:"
-    for mod in remove_later_modules
-        @debug "deleting $mod from compiled_modules"
-        delete!(JuliaInterpreter.compiled_modules, mod)
     end
 
     @debug "remaining items" unset = unset
@@ -200,14 +206,18 @@ function set_compiled_functions_modules!(params)
     return []
 end
 
-function compile_mode_for_all_submodules(mod, seen = Set())
+function toggle_mode_for_all_submodules(mod, compiled, seen = Set())
     for name in names(mod; all = true)
         if isdefined(mod, name)
             obj = getfield(mod, name)
             if obj !== mod && obj isa Module && !(obj in seen)
                 push!(seen, obj)
-                push!(JuliaInterpreter.compiled_modules, obj)
-                compile_mode_for_all_submodules(obj, seen)
+                if compiled
+                    push!(JuliaInterpreter.compiled_modules, obj)
+                else
+                    delete!(JuliaInterpreter.compiled_modules, obj)
+                end
+                toggle_mode_for_all_submodules(obj, compiled, seen)
             end
         end
     end

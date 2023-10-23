@@ -1078,3 +1078,79 @@ end
 function breakpointlocations_request(conn, state::DebuggerState, params::BreakpointLocationsArguments)
     return BreakpointLocationsResponseArguments(BreakpointLocation[])
 end
+
+using REPL
+function completions_request(conn, state::DebuggerState, params::CompletionsArguments)
+    @debug "completions_request"
+
+    (c, l) = params.column, coalesce(params.line, 1)
+    io = IOBuffer()
+    for (i, line) in enumerate(eachline(IOBuffer(params.text)))
+        if i == l
+            print(io, first(line, c))
+            break
+        end
+        println(io, line)
+    end
+    text = String(take!(io))
+    split(text, )
+
+    completions = CompletionItem[]
+    for v in something(JuliaInterpreter.locals(state.frame), [])
+        push!(completions, CompletionItem(string(v.name), missing, "variable", missing, missing))
+    end
+    for v in something(collect_global_refs(state.frame), [])
+        push!(completions, CompletionItem(string(v.name), missing, "reference", missing, missing))
+    end
+    for (k,v) in REPL.REPLCompletions.latex_symbols
+        push!(completions, CompletionItem(v, k, "text", missing, missing))
+    end
+    for (k,v) in REPL.REPLCompletions.emoji_symbols
+        push!(completions, CompletionItem(v, k, "text", missing, missing))
+    end
+
+    return CompletionsResponseArguments(completions)
+end
+
+# function completions_request(conn, state::DebuggerState, params::CompletionsArguments)
+#     @debug "completions_request"
+
+#     (c, l) = params.column, coalesce(params.line, 1)
+#     io = IOBuffer()
+#     for (i, line) in enumerate(eachline(IOBuffer(params.text)))
+#         if i == l
+#             print(io, first(line, c))
+#             break
+#         end
+#         println(io, line)
+#     end
+#     text = String(take!(io))
+
+#     @show text c l
+
+#     thismod = state.frame.framecode.scope isa Module ? state.frame.framecode.scope : Main
+
+#     comps, range, should_complete = REPL.REPLCompletions.completions(text, lastindex(text), thismod)
+
+#     # locals = JuliaInterpreter.locals(state.frame)
+#     # globals = collect_global_refs(state.frame)
+#     # REPL.REPLCompletions.latex_symbols
+#     # REPL.REPLCompletions.emoji_symbols
+
+#     # comps = CompletionItem[]
+
+#     @show first(comps, 5) range should_complete
+
+#     return CompletionsResponseArguments(
+#         map(comps) do comp
+#             ct = REPL.REPLCompletions.completion_text(comp)
+#             CompletionItem(
+#                 ct,
+#                 ct,
+#                 "value",
+#                 range.start,
+#                 length(range)
+#             )
+#         end
+#     )
+# end

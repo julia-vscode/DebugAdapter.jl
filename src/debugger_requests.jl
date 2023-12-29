@@ -5,7 +5,7 @@ function run_notification(conn, state::DebuggerState, params::NamedTuple{(:progr
 
     state.debug_mode = :launch
     filename_to_debug = isabspath(params.program) ? params.program : joinpath(pwd(), params.program)
-    put!(state.next_cmd, (cmd = :run, program = filename_to_debug))
+    put!(state.next_cmd, (cmd=:run, program=filename_to_debug))
 end
 
 function debug_notification(conn, state::DebuggerState, params::DebugArguments)
@@ -73,10 +73,10 @@ function exec_notification(conn, state::DebuggerState, params::ExecArguments)
     state.sources[0] = params.code
 
     @debug "setting source_path" file = params.file
-    put!(state.next_cmd, (cmd = :set_source_path, source_path = params.file))
+    put!(state.next_cmd, (cmd=:set_source_path, source_path=params.file))
 
-    params.compiledModulesOrFunctions !== missing && set_compiled_items_request(conn, state, (compiledModulesOrFunctions = params.compiledModulesOrFunctions,))
-    params.compiledMode !== missing && set_compiled_mode_request(conn, state, (compiledMode = params.compiledMode,))
+    params.compiledModulesOrFunctions !== missing && set_compiled_items_request(conn, state, (compiledModulesOrFunctions=params.compiledModulesOrFunctions,))
+    params.compiledMode !== missing && set_compiled_mode_request(conn, state, (compiledMode=params.compiledMode,))
 
     ex = Meta.parse(params.code)
     state.expr_splitter = JuliaInterpreter.ExprSplitter(Main, ex) # TODO: line numbers ?
@@ -87,7 +87,7 @@ function exec_notification(conn, state::DebuggerState, params::ExecArguments)
     elseif JuliaInterpreter.shouldbreak(state.frame, state.frame.pc)
         JSONRPC.send(conn, stopped_notification_type, StoppedEventArguments("breakpoint", missing, 1, missing, missing, missing))
     else
-        put!(state.next_cmd, (cmd = :continue,))
+        put!(state.next_cmd, (cmd=:continue,))
     end
 end
 
@@ -125,7 +125,7 @@ function set_compiled_functions_modules!(items::Vector{String})
     @debug "setting as compiled" items = items
 
     # sort inputs once so that removed items are at the end
-    sort!(items, lt = function (a, b)
+    sort!(items, lt=function (a, b)
         am = startswith(a, '-')
         bm = startswith(b, '-')
 
@@ -206,8 +206,8 @@ function set_compiled_functions_modules!(params)
     return []
 end
 
-function toggle_mode_for_all_submodules(mod, compiled, seen = Set())
-    for name in names(mod; all = true)
+function toggle_mode_for_all_submodules(mod, compiled, seen=Set())
+    for name in names(mod; all=true)
         if isdefined(mod, name)
             obj = getfield(mod, name)
             if obj !== mod && obj isa Module && !(obj in seen)
@@ -223,7 +223,7 @@ function toggle_mode_for_all_submodules(mod, compiled, seen = Set())
     end
 end
 
-function get_obj_by_accessor(accessor, super = nothing)
+function get_obj_by_accessor(accessor, super=nothing)
     parts = split(accessor, '.')
     @assert length(parts) > 0
     top = popfirst!(parts)
@@ -324,7 +324,7 @@ function set_function_break_points_request(conn, state::DebuggerState, params::S
             parsed_name = Meta.parse(decoded_name)
 
             if parsed_name isa Symbol
-                return (mod = Main, name = parsed_name, signature = nothing, condition = parsed_condition)
+                return (mod=Main, name=parsed_name, signature=nothing, condition=parsed_condition)
             elseif parsed_name isa Expr
                 if parsed_name.head == :.
                     # TODO Support this case
@@ -339,16 +339,16 @@ function set_function_break_points_request(conn, state::DebuggerState, params::S
                         end
                         if all_args_are_legit
 
-                            return (mod = Main, name = parsed_name.args[1], signature = map(j -> j.args[1], parsed_name.args[2:end]), condition = parsed_condition)
+                            return (mod=Main, name=parsed_name.args[1], signature=map(j -> j.args[1], parsed_name.args[2:end]), condition=parsed_condition)
                         else
-                            return (mod = Main, name = parsed_name.args[1], signature = nothing, condition = parsed_condition)
+                            return (mod=Main, name=parsed_name.args[1], signature=nothing, condition=parsed_condition)
                         end
                     else
-                        return (mod = Main, name = parsed_name.args[1], signature = nothing, condition = parsed_condition)
+                        return (mod=Main, name=parsed_name.args[1], signature=nothing, condition=parsed_condition)
                     end
                 else
                     return nothing
-        end
+                end
             else
                 return nothing
             end
@@ -473,7 +473,7 @@ function stack_trace_request(conn, state::DebuggerState, params::StackTraceArgum
                 else
                     src = copy(src)
                 end
-                JuliaInterpreter.replace_coretypes!(src; rev = true)
+                JuliaInterpreter.replace_coretypes!(src; rev=true)
                 code = Base.invokelatest(JuliaInterpreter.framecode_lines, src)
 
                 state.sources[state.next_source_id] = join(code, '\n')
@@ -509,29 +509,29 @@ function stack_trace_request(conn, state::DebuggerState, params::StackTraceArgum
             # for code that is passed via the @enter or @run macros,
             # and that code we have stored as source with id 0
             push!(
-                    frames,
-                    StackFrame(
-                        id,
-                        meth_or_mod_name,
-                        Source(
-                            "REPL",
-                            missing,
-                            0,
-                            missing,
-                            missing,
-                            missing,
-                            missing,
-                            missing
-                        ),
-                        lineno,
+                frames,
+                StackFrame(
+                    id,
+                    meth_or_mod_name,
+                    Source(
+                        "REPL",
+                        missing,
                         0,
                         missing,
                         missing,
                         missing,
                         missing,
                         missing
-                    )
+                    ),
+                    lineno,
+                    0,
+                    missing,
+                    missing,
+                    missing,
+                    missing,
+                    missing
                 )
+            )
         end
 
         id += 1
@@ -569,17 +569,17 @@ function scopes_request(conn, state::DebuggerState, params::ScopesArguments)
     scopes = []
 
     if isfile(file_name) && code_range !== nothing
-        push!(scopes, Scope(name = "Local", variablesReference = local_var_ref_id, expensive = false, source = Source(name = basename(file_name), path = file_name), line = code_range.start, endLine = code_range.stop))
-        push!(scopes, Scope(name = "Global", variablesReference = global_var_ref_id, expensive = false, source = Source(name = basename(file_name), path = file_name), line = code_range.start, endLine = code_range.stop))
+        push!(scopes, Scope(name="Local", variablesReference=local_var_ref_id, expensive=false, source=Source(name=basename(file_name), path=file_name), line=code_range.start, endLine=code_range.stop))
+        push!(scopes, Scope(name="Global", variablesReference=global_var_ref_id, expensive=false, source=Source(name=basename(file_name), path=file_name), line=code_range.start, endLine=code_range.stop))
     else
-        push!(scopes, Scope(name = "Local", variablesReference = local_var_ref_id, expensive = false))
-        push!(scopes, Scope(name = "Global", variablesReference = global_var_ref_id, expensive = false))
+        push!(scopes, Scope(name="Local", variablesReference=local_var_ref_id, expensive=false))
+        push!(scopes, Scope(name="Global", variablesReference=global_var_ref_id, expensive=false))
     end
 
     curr_mod = JuliaInterpreter.moduleof(curr_fr)
     push!(state.varrefs, VariableReference(:module, curr_mod))
 
-    push!(scopes, Scope(name = "Global ($(curr_mod))", variablesReference = length(state.varrefs), expensive = true))
+    push!(scopes, Scope(name="Global ($(curr_mod))", variablesReference=length(state.varrefs), expensive=true))
 
     return ScopesResponseArguments(scopes)
 end
@@ -597,7 +597,7 @@ function construct_return_msg_for_var(state::DebuggerState, name, value)
     v_value_as_string = try
         Base.invokelatest(sprintlimited, value)
     catch err
-        @debug "error showing value" exception=(err, catch_backtrace())
+        @debug "error showing value" exception = (err, catch_backtrace())
         "Error while showing this value."
     end
 
@@ -609,7 +609,7 @@ function construct_return_msg_for_var(state::DebuggerState, name, value)
             0
         elseif value isa AbstractArray || value isa AbstractDict
             fieldcount(v_type) > 0 ? 1 : 0
-            else
+        else
             fieldcount(v_type)
         end
 
@@ -623,22 +623,22 @@ function construct_return_msg_for_var(state::DebuggerState, name, value)
         end
 
         return Variable(
-            name = name,
-            value = v_value_as_string,
-            type = string(v_type),
-            variablesReference = new_var_id,
-            namedVariables = named_count,
-            indexedVariables = indexed_count
+            name=name,
+            value=v_value_as_string,
+            type=string(v_type),
+            variablesReference=new_var_id,
+            namedVariables=named_count,
+            indexedVariables=indexed_count
         )
     else
-        return Variable(name = name, value = v_value_as_string, type = string(v_type), variablesReference = 0)
+        return Variable(name=name, value=v_value_as_string, type=string(v_type), variablesReference=0)
     end
 end
 
 function construct_return_msg_for_var_with_undef_value(state::DebuggerState, name)
     v_type_as_string = ""
 
-    return Variable(name = name, type = v_type_as_string, value = "#undef", variablesReference = 0)
+    return Variable(name=name, type=v_type_as_string, value="#undef", variablesReference=0)
 end
 
 function get_keys_with_drop_take(value, skip_count, take_count)
@@ -657,7 +657,7 @@ function collect_global_refs(frame::JuliaInterpreter.Frame)
         func = frame.framedata.locals[1].value
         args = (Base.unwrap_unionall(m.sig).parameters[2:end]...,)
 
-        ci = code_typed(func, args, optimize = false)[1][1]
+        ci = code_typed(func, args, optimize=false)[1][1]
 
         return collect_global_refs(ci)
     catch err
@@ -666,14 +666,14 @@ function collect_global_refs(frame::JuliaInterpreter.Frame)
     end
 end
 
-function collect_global_refs(ci::Core.CodeInfo, refs = Set([]))
+function collect_global_refs(ci::Core.CodeInfo, refs=Set([]))
     for expr in ci.code
         collect_global_refs(expr, refs)
     end
     refs
 end
 
-function collect_global_refs(expr::Expr, refs = Set([]))
+function collect_global_refs(expr::Expr, refs=Set([]))
     args = Meta.isexpr(expr, :call) ? expr.args[2:end] : expr.args
     for arg in args
         collect_global_refs(arg, refs)
@@ -686,12 +686,12 @@ collect_global_refs(expr, refs) = nothing
 collect_global_refs(expr::GlobalRef, refs) = push!(refs, expr)
 
 function push_module_names!(variables, state, mod)
-    for n in names(mod, all = true)
+    for n in names(mod, all=true)
         !isdefined(mod, n) && continue
         Base.isdeprecated(mod, n) && continue
 
         x = getfield(mod, n)
-    x === Main && continue
+        x === Main && continue
 
         s = string(n)
         startswith(s, "#") && continue
@@ -746,7 +746,7 @@ function variables_request(conn, state::DebuggerState, params::VariablesArgument
 
         if filter_type == "" || filter_type == "named"
             if (var_ref.value isa AbstractArray || var_ref.value isa AbstractDict) && !(var_ref.value isa Array) &&
-                fieldcount(container_type) > 0
+               fieldcount(container_type) > 0
                 push!(state.varrefs, VariableReference(:fields, var_ref.value))
                 new_var_id = length(state.varrefs)
                 named_count = fieldcount(container_type)
@@ -788,7 +788,7 @@ function variables_request(conn, state::DebuggerState, params::VariablesArgument
                             val = Base.invokelatest(getindex, var_ref.value, i)
                             s = construct_return_msg_for_var(state, join(string.(i.I), ','), val)
                         catch err
-                            s = Variable(name = join(string.(i.I), ','), type = "", value = "#error", variablesReference = 0)
+                            s = Variable(name=join(string.(i.I), ','), type="", value="#error", variablesReference=0)
                         end
                         push!(variables, s)
                     end
@@ -871,7 +871,7 @@ function set_variable_request(conn, state::DebuggerState, params::SetVariableArg
 
     if var_ref.kind == :scope
         try
-            ret = JuliaInterpreter.eval_code(var_ref.value, "$var_name = $var_value");
+            ret = JuliaInterpreter.eval_code(var_ref.value, "$var_name = $var_value")
 
             s = construct_return_msg_for_var(state::DebuggerState, "", ret)
 
@@ -950,7 +950,7 @@ function restart_frame_request(conn, state::DebuggerState, params::RestartFrameA
 
     curr_fr = JuliaInterpreter.leaf(state.frame)
 
-        i = 1
+    i = 1
 
     while frame_id > i
         curr_fr = curr_fr.caller
@@ -969,7 +969,7 @@ function restart_frame_request(conn, state::DebuggerState, params::RestartFrameA
         state.frame = curr_fr
     end
 
-    put!(state.next_cmd, (cmd = :continue,))
+    put!(state.next_cmd, (cmd=:continue,))
 
     return RestartFrameResponseResponseArguments()
 end
@@ -1007,15 +1007,15 @@ function evaluate_request(conn, state::DebuggerState, params::EvaluateArguments)
 
         return EvaluateResponseArguments(Base.invokelatest(sprintlimited, ret_val), missing, missing, 0, missing, missing, missing)
     catch err
-        @debug "error showing value" exception=(err, catch_backtrace())
+        @debug "error showing value" exception = (err, catch_backtrace())
         return EvaluateResponseArguments(string("Internal Error: ", sprint(showerror, err)), missing, missing, 0, missing, missing, missing)
     end
 end
 
-    function continue_request(conn, state::DebuggerState, params::ContinueArguments)
+function continue_request(conn, state::DebuggerState, params::ContinueArguments)
     @debug "continue_request"
 
-    put!(state.next_cmd, (cmd = :continue,))
+    put!(state.next_cmd, (cmd=:continue,))
 
     return ContinueResponseArguments(true)
 end
@@ -1023,7 +1023,7 @@ end
 function next_request(conn, state::DebuggerState, params::NextArguments)
     @debug "next_request"
 
-    put!(state.next_cmd, (cmd = :next,))
+    put!(state.next_cmd, (cmd=:next,))
 
     return NextResponseArguments()
 end
@@ -1031,7 +1031,7 @@ end
 function setp_in_request(conn, state::DebuggerState, params::StepInArguments)
     @debug "stepin_request"
 
-    put!(state.next_cmd, (cmd = :stepIn, targetId = params.targetId))
+    put!(state.next_cmd, (cmd=:stepIn, targetId=params.targetId))
 
     return StepInResponseArguments()
 end
@@ -1049,7 +1049,7 @@ end
 function setp_out_request(conn, state::DebuggerState, params::StepOutArguments)
     @debug "stepout_request"
 
-    put!(state.next_cmd, (cmd = :stepOut,))
+    put!(state.next_cmd, (cmd=:stepOut,))
 
     return StepOutResponseArguments()
 end
@@ -1057,7 +1057,7 @@ end
 function disconnect_request(conn, state::DebuggerState, params::DisconnectArguments)
     @debug "disconnect_request"
 
-    put!(state.next_cmd, (cmd = :stop,))
+    put!(state.next_cmd, (cmd=:stop,))
 
     return DisconnectResponseArguments()
 end
@@ -1066,13 +1066,13 @@ function terminate_request(conn, state::DebuggerState, params::TerminateArgument
     @debug "terminate_request"
 
     JSONRPC.send(conn, finished_notification_type, nothing)
-    put!(state.next_cmd, (cmd = :stop,))
+    put!(state.next_cmd, (cmd=:stop,))
 
     return TerminateResponseArguments()
 end
 
 function threads_request(conn, state::DebuggerState, params::Nothing)
-    return ThreadsResponseArguments([Thread(id = 1, name = "Main Thread")])
+    return ThreadsResponseArguments([Thread(id=1, name="Main Thread")])
 end
 
 function breakpointlocations_request(conn, state::DebuggerState, params::BreakpointLocationsArguments)

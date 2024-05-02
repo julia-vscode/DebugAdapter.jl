@@ -121,7 +121,7 @@ function startdebug(socket, error_handler=nothing)
                                 itr += 1
                                 if itr > 100
                                     success = false
-                                    @warn "Could not step into sepcified target."
+                                    @warn "Could not step into specified target."
                                     break
                                 end
                             end

@@ -1,5 +1,6 @@
 module DebugAdapter
 
+import Pkg
 import JSON
 import JSONRPC
 import JuliaInterpreter

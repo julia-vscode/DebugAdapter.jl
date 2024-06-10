@@ -45,6 +45,5 @@ end
 
 
 # Our own requests
-const finished_notification_type = JSONRPC.NotificationType("finished", Nothing)
 const set_compiled_items_notification_type = JSONRPC.NotificationType("setCompiledItems", NamedTuple{(:compiledModulesOrFunctions,),Tuple{Vector{String}}})
 const set_compiled_mode_notification_type = JSONRPC.NotificationType("setCompiledMode", NamedTuple{(:compiledMode,),Tuple{Bool}})

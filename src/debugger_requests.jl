@@ -46,9 +46,24 @@ function configuration_done_request(conn, state, params::Union{Nothing,Configura
 end
 
 function launch_request(conn, state::DebuggerState, params::LaunchArguments)
+    # Indicate that we are ready for the initial configuration phase, and then
+    # wait for it to finish
     JSONRPC.send(conn, initialized_notification_type, InitializedEventArguments())
-
     take!(state.configuration_done)
+
+    Pkg.activate(params.juliaEnv)
+
+    empty!(ARGS)
+    if params.args!==missing
+        for arg in params.args
+            push!(ARGS, arg)
+        end
+    end
+
+    if params.cwd!==missing
+        cd(params.cwd)
+    end
+
     if params.noDebug === true
         state.debug_mode = :launch
         filename_to_debug = isabspath(params.program) ? params.program : joinpath(pwd(), params.program)
@@ -70,7 +85,6 @@ function launch_request(conn, state::DebuggerState, params::LaunchArguments)
             read(filename_to_debug, String)
         catch err
             # TODO Think about some way to return an error message in the UI
-            JSONRPC.send(conn, finished_notification_type, nothing)
             put!(state.next_cmd, (cmd=:stop,))
             return LaunchResponseArguments()
         end
@@ -80,7 +94,6 @@ function launch_request(conn, state::DebuggerState, params::LaunchArguments)
         # handle a case when lowering fails
         if !is_valid_expression(ex)
             # TODO Think about some way to return an error message in the UI
-            JSONRPC.send(conn, finished_notification_type, nothing)
             put!(state.next_cmd, (cmd=:stop,))
             return LaunchResponseArguments()
         end
@@ -92,7 +105,6 @@ function launch_request(conn, state::DebuggerState, params::LaunchArguments)
         next_frame = get_next_top_level_frame(state)
 
         if next_frame === nothing
-            JSONRPC.send(conn, finished_notification_type, nothing)
             put!(state.next_cmd, (cmd=:stop,))
             return LaunchResponseArguments()
         end
@@ -116,7 +128,12 @@ is_valid_expression(::Nothing) = false # empty
 is_valid_expression(ex::Expr) = !Meta.isexpr(ex, (:incomplete, :error))
 
 function attach_request(conn, state::DebuggerState, params::JuliaAttachArguments)
-    @debug "exec_request" params = params
+    @debug "attach_request" params = params
+
+    # Indicate that we are ready for the initial configuration phase, and then
+    # wait for it to finish
+    JSONRPC.send(conn, initialized_notification_type, InitializedEventArguments())
+    take!(state.configuration_done)
 
     state.debug_mode = :attach
 
@@ -1117,7 +1134,6 @@ end
 function terminate_request(conn, state::DebuggerState, params::TerminateArguments)
     @debug "terminate_request"
 
-    JSONRPC.send(conn, finished_notification_type, nothing)
     put!(state.next_cmd, (cmd = :stop,))
 
     return TerminateResponseArguments()

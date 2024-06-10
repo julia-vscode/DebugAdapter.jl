@@ -1,63 +1,113 @@
 # Request handlers
 
-function run_notification(conn, state::DebuggerState, params::NamedTuple{(:program,),Tuple{String}})
-    @debug "run_request"
+function initialize_request(conn, state::DebuggerState, params::InitializeRequestArguments)
+    return Capabilities(
+        true, # supportsConfigurationDoneRequest::Union{Missing,Bool}
+        true, # supportsFunctionBreakpoints::Union{Missing,Bool}
+        true, #supportsConditionalBreakpoints::Union{Missing,Bool}
+        false, # supportsHitConditionalBreakpoints::Union{Missing,Bool}
+        true, # supportsEvaluateForHovers::Union{Missing,Bool}
+        ExceptionBreakpointsFilter[ExceptionBreakpointsFilter("error", "Uncaught Exceptions", true), ExceptionBreakpointsFilter("throw", "All Exceptions", false)], # exceptionBreakpointFilters::Vector{ExceptionBreakpointsFilter}
+        false, # supportsStepBack::Union{Missing,Bool}
+        true, # supportsSetVariable::Union{Missing,Bool}
+        true, # supportsRestartFrame::Union{Missing,Bool}
+        missing, # supportsGotoTargetsRequest::Union{Missing,Bool}
+        true, # supportsStepInTargetsRequest::Union{Missing,Bool}
+        false, # supportsCompletionsRequest::Union{Missing,Bool}
+        missing, # supportsModulesRequest::Union{Missing,Bool}
+        ColumnDescriptor[], #additionalModuleColumns::Vector{ColumnDescriptor}
+        ChecksumAlgorithm[], # supportedChecksumAlgorithms::Vector{ChecksumAlgorithm}
+        missing, # supportsRestartRequest::Union{Missing,Bool}
+        missing, # supportsExceptionOptions::Union{Missing,Bool}
+        missing, #supportsValueFormattingOptions::Union{Missing,Bool}
+        true, # supportsExceptionInfoRequest::Union{Missing,Bool}
+        missing, # supportTerminateDebuggee::Union{Missing,Bool}
+        missing, # supportsDelayedStackTraceLoading::Union{Missing,Bool}
+        missing, # supportsLoadedSourcesRequest::Union{Missing,Bool}
+        false, # supportsLogPoints::Union{Missing,Bool}
+        missing, # supportsTerminateThreadsRequest::Union{Missing,Bool}
+        missing, #supportsSetExpression::Union{Missing,Bool}
+        true, # supportsTerminateRequest::Union{Missing,Bool}
+        false, # supportsDataBreakpoints::Union{Missing,Bool}
+        missing, # supportsReadMemoryRequest::Union{Missing,Bool}
+        missing # supportsDisassembleRequest::Union{Missing,Bool}
+    )
 
-    state.debug_mode = :launch
-    filename_to_debug = isabspath(params.program) ? params.program : joinpath(pwd(), params.program)
-    put!(state.next_cmd, (cmd = :run, program = filename_to_debug))
+        # response.body.supportsCancelRequest = false
+
+        # response.body.supportsBreakpointLocationsRequest = false
+
+        # response.body.supportsConditionalBreakpoints = true
 end
 
-function debug_notification(conn, state::DebuggerState, params::DebugArguments)
-    @debug "debug_request" params = params
+function configuration_done_request(conn, state, params::Union{Nothing,ConfigurationDoneArguments})
+    put!(state.configuration_done, true)
+    return ConfigurationDoneResponseArguments()
+end
 
-    state.debug_mode = :launch
+function launch_request(conn, state::DebuggerState, params::LaunchArguments)
+    JSONRPC.send(conn, initialized_notification_type, InitializedEventArguments())
 
-    filename_to_debug = isabspath(params.program) ? params.program : joinpath(pwd(), params.program)
+    take!(state.configuration_done)
+    if params.noDebug === true
+        state.debug_mode = :launch
+        filename_to_debug = isabspath(params.program) ? params.program : joinpath(pwd(), params.program)
+        put!(state.next_cmd, (cmd = :run, program = filename_to_debug))
 
-    @debug "We are debugging the file $filename_to_debug."
-
-    put!(state.next_cmd, (cmd=:set_source_path, source_path=filename_to_debug))
-
-    file_content = try
-        read(filename_to_debug, String)
-    catch err
-        # TODO Think about some way to return an error message in the UI
-        JSONRPC.send(conn, finished_notification_type, nothing)
-        put!(state.next_cmd, (cmd=:stop,))
-        return
-    end
-
-    ex = Base.parse_input_line(file_content; filename=filename_to_debug)
-
-    # handle a case when lowering fails
-    if !is_valid_expression(ex)
-        # TODO Think about some way to return an error message in the UI
-        JSONRPC.send(conn, finished_notification_type, nothing)
-        put!(state.next_cmd, (cmd=:stop,))
-        return
-    end
-
-    params.compiledModulesOrFunctions !== missing && set_compiled_items_request(conn, state, (compiledModulesOrFunctions=params.compiledModulesOrFunctions,))
-    params.compiledMode !== missing && set_compiled_mode_request(conn, state, (compiledMode=params.compiledMode,))
-
-    state.expr_splitter = JuliaInterpreter.ExprSplitter(Main, ex)
-    next_frame = get_next_top_level_frame(state)
-
-    if next_frame === nothing
-        JSONRPC.send(conn, finished_notification_type, nothing)
-        put!(state.next_cmd, (cmd=:stop,))
-        return
-    end
-
-    state.frame = next_frame
-
-    if params.stopOnEntry
-        JSONRPC.send(conn, stopped_notification_type, StoppedEventArguments("entry", missing, 1, missing, missing, missing))
-    elseif JuliaInterpreter.shouldbreak(state.frame, state.frame.pc)
-        JSONRPC.send(conn, stopped_notification_type, StoppedEventArguments("breakpoint", missing, 1, missing, missing, missing))
+        return LaunchResponseArguments()
     else
-        put!(state.next_cmd, (cmd=:continue,))
+        @debug "debug_request" params = params
+
+        state.debug_mode = :launch
+
+        filename_to_debug = isabspath(params.program) ? params.program : joinpath(pwd(), params.program)
+
+        @debug "We are debugging the file $filename_to_debug."
+
+        put!(state.next_cmd, (cmd=:set_source_path, source_path=filename_to_debug))
+
+        file_content = try
+            read(filename_to_debug, String)
+        catch err
+            # TODO Think about some way to return an error message in the UI
+            JSONRPC.send(conn, finished_notification_type, nothing)
+            put!(state.next_cmd, (cmd=:stop,))
+            return LaunchResponseArguments()
+        end
+
+        ex = Base.parse_input_line(file_content; filename=filename_to_debug)
+
+        # handle a case when lowering fails
+        if !is_valid_expression(ex)
+            # TODO Think about some way to return an error message in the UI
+            JSONRPC.send(conn, finished_notification_type, nothing)
+            put!(state.next_cmd, (cmd=:stop,))
+            return LaunchResponseArguments()
+        end
+
+        params.compiledModulesOrFunctions !== missing && set_compiled_items_request(conn, state, (compiledModulesOrFunctions=params.compiledModulesOrFunctions,))
+        params.compiledMode !== missing && set_compiled_mode_request(conn, state, (compiledMode=params.compiledMode,))
+
+        state.expr_splitter = JuliaInterpreter.ExprSplitter(Main, ex)
+        next_frame = get_next_top_level_frame(state)
+
+        if next_frame === nothing
+            JSONRPC.send(conn, finished_notification_type, nothing)
+            put!(state.next_cmd, (cmd=:stop,))
+            return LaunchResponseArguments()
+        end
+
+        state.frame = next_frame
+
+        if params.stopOnEntry
+            JSONRPC.send(conn, stopped_notification_type, StoppedEventArguments("entry", missing, 1, missing, missing, missing))
+        elseif JuliaInterpreter.shouldbreak(state.frame, state.frame.pc)
+            JSONRPC.send(conn, stopped_notification_type, StoppedEventArguments("breakpoint", missing, 1, missing, missing, missing))
+        else
+            put!(state.next_cmd, (cmd=:continue,))
+        end
+
+        return LaunchResponseArguments()
     end
 end
 
@@ -65,7 +115,7 @@ is_valid_expression(x) = true # atom
 is_valid_expression(::Nothing) = false # empty
 is_valid_expression(ex::Expr) = !Meta.isexpr(ex, (:incomplete, :error))
 
-function exec_notification(conn, state::DebuggerState, params::ExecArguments)
+function attach_request(conn, state::DebuggerState, params::JuliaAttachArguments)
     @debug "exec_request" params = params
 
     state.debug_mode = :attach
@@ -89,6 +139,8 @@ function exec_notification(conn, state::DebuggerState, params::ExecArguments)
     else
         put!(state.next_cmd, (cmd = :continue,))
     end
+
+    return AttachResponseArguments()
 end
 
 function reset_compiled_items()

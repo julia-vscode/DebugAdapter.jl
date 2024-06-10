@@ -18,6 +18,11 @@ end
     supportsVariablePaging::Union{Missing,Bool}
     supportsRunInTerminalRequest::Union{Missing,Bool}
     supportsMemoryReferences::Union{Missing,Bool}
+    supportsProgressReporting::Union{Missing,Bool}
+    supportsInvalidatedEvent::Union{Missing,Bool}
+    supportsMemoryEvent::Union{Missing,Bool}
+    supportsArgsCanBeInterpretedByShell::Union{Missing,Bool}
+    supportsStartDebuggingRequest::Union{Missing,Bool}
 end
 
 @dict_readable struct ConfigurationDoneArguments <: Outbound
@@ -25,11 +30,15 @@ end
 
 @dict_readable struct LaunchArguments <: Outbound
     noDebug::Union{Missing,Bool}
-    __restart::Any
-end
-
-@dict_readable struct AttachArguments <: Outbound
-    __restart::Any
+    __restart::Union{Missing,Any}
+    program::String
+    stopOnEntry::Union{Missing,Bool}
+    cwd::Union{Missing,String}
+    juliaEnv::Union{Missing,String}
+    trace::Union{Missing,Bool}
+    args::Union{Missing,Vector{String}}
+    compiledModulesOrFunctions::Union{Missing,Vector{String}}
+    compiledMode::Union{Missing,Bool}
 end
 
 @dict_readable struct RestartArguments <: Outbound

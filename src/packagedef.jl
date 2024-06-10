@@ -3,6 +3,13 @@
 
 import Sockets, Base64
 
+module JSONRPC
+    using ..JSON
+
+    include("JSONRPC/packagedef.jl")
+end
+import .JSONRPC: @dict_readable, Outbound
+
 include("protocol/debug_adapter_protocol.jl")
 include("debugger_utils.jl")
 include("debugger_core.jl")
@@ -11,7 +18,9 @@ include("debugger_requests.jl")
 
 function clean_up_ARGS_in_launch_mode()
     pipename = ARGS[1]
-    crashreporting_pipename = ARGS[2]
+    server_pipename = ARGS[2]
+    crashreporting_pipename = ARGS[3]
+    deleteat!(ARGS, 1)
     deleteat!(ARGS, 1)
     deleteat!(ARGS, 1)
 
@@ -27,7 +36,7 @@ function clean_up_ARGS_in_launch_mode()
         end
     end
 
-    return pipename, crashreporting_pipename
+    return pipename, server_pipename, crashreporting_pipename
 end
 
 function startdebug(socket, error_handler=nothing)
@@ -45,10 +54,8 @@ function startdebug(socket, error_handler=nothing)
 
             msg_dispatcher = JSONRPC.MsgDispatcher()
             msg_dispatcher[disconnect_request_type] = (conn, params) -> disconnect_request(conn, state, params)
-            msg_dispatcher[run_notification_type] = (conn, params) -> run_notification(conn, state, params)
-            msg_dispatcher[debug_notification_type] = (conn, params) -> debug_notification(conn, state, params)
 
-            msg_dispatcher[exec_notification_type] = (conn, params) -> exec_notification(conn, state, params)
+            msg_dispatcher[attach_request_type] = (conn, params) -> attach_request(conn, state, params)
             msg_dispatcher[set_break_points_request_type] = (conn, params) -> set_break_points_request(conn, state, params)
             msg_dispatcher[set_exception_break_points_request_type] = (conn, params) -> set_exception_break_points_request(conn, state, params)
             msg_dispatcher[set_function_exception_break_points_request_type] = (conn, params) -> set_function_break_points_request(conn, state, params)
@@ -70,10 +77,21 @@ function startdebug(socket, error_handler=nothing)
             msg_dispatcher[breakpointslocation_request_type] = (conn, params) -> breakpointlocations_request(conn, state, params)
             msg_dispatcher[set_compiled_items_notification_type] = (conn, params) -> set_compiled_items_request(conn, state, params)
             msg_dispatcher[set_compiled_mode_notification_type] = (conn, params) -> set_compiled_mode_request(conn, state, params)
+            msg_dispatcher[initialize_request_type] = (conn, params) -> initialize_request(conn, state, params)
+            msg_dispatcher[launch_request_type] = (conn, params) -> launch_request(conn, state, params)
+            msg_dispatcher[configuration_done_request_type] = (conn, params) -> configuration_done_request(conn, state, params)
 
             @async try
                 for msg in endpoint
-                    JSONRPC.dispatch_msg(endpoint, msg_dispatcher, msg)
+                    @async try
+                        JSONRPC.dispatch_msg(endpoint, msg_dispatcher, msg)
+                    catch err
+                        if error_handler === nothing
+                            Base.display_error(err, catch_backtrace())
+                        else
+                            error_handler(err, Base.catch_backtrace())
+                        end
+                    end
                 end
             catch err
                 if error_handler === nothing
@@ -135,7 +153,7 @@ function startdebug(socket, error_handler=nothing)
                     end
 
                     if ret === nothing
-                        JSONRPC.send(endpoint, finished_notification_type, nothing)
+                        JSONRPC.send(endpoint, terminated_notification_type, TerminatedEventArguments(missing))
                         state.debug_mode == :launch && break
                     else
                         send_stopped_msg(endpoint, ret, state)

@@ -8,6 +8,7 @@ end
 end
 
 @dict_readable struct InitializeResponseArguments <: Outbound
+    body::Union{Missing,Capabilities}
 end
 
 @dict_readable struct ConfigurationDoneResponseArguments <: Outbound

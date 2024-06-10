@@ -15,9 +15,10 @@ mutable struct DebuggerState
     varrefs::Vector{VariableReference}
     next_cmd::Channel{Any}
     not_yet_set_compiled_items::Vector{String}
+    configuration_done::Channel{Bool}
 
     function DebuggerState()
-        return new(nothing, nothing, nothing, Set{String}(), :unknown, JuliaInterpreter.finish_and_return!, Dict{Int,String}(), 1, VariableReference[], Channel{Any}(Inf), String[])
+        return new(nothing, nothing, nothing, Set{String}(), :unknown, JuliaInterpreter.finish_and_return!, Dict{Int,String}(), 1, VariableReference[], Channel{Any}(Inf), String[], Channel{Bool}(1))
     end
 end
 

@@ -3,12 +3,12 @@
 
 import Sockets, Base64
 
-module JSONRPC
+module DAPRPC
     using ..JSON
 
-    include("JSONRPC/packagedef.jl")
+    include("DAPRPC/packagedef.jl")
 end
-import .JSONRPC: @dict_readable, Outbound
+import .DAPRPC: @dict_readable, Outbound
 
 include("protocol/debug_adapter_protocol.jl")
 include("debugger_utils.jl")
@@ -20,13 +20,13 @@ function startdebug(socket, error_handler=nothing)
 
     try
 
-        endpoint = JSONRPC.JSONRPCEndpoint(socket, socket, error_handler)
+        endpoint = DAPRPC.DAPEndpoint(socket, socket, error_handler)
 
         run(endpoint)
 
         state = DebuggerState()
 
-        msg_dispatcher = JSONRPC.MsgDispatcher()
+        msg_dispatcher = DAPRPC.MsgDispatcher()
         msg_dispatcher[disconnect_request_type] = (conn, params) -> disconnect_request(conn, state, params)
 
         msg_dispatcher[attach_request_type] = (conn, params) -> attach_request(conn, state, params)
@@ -58,7 +58,7 @@ function startdebug(socket, error_handler=nothing)
         @async try
             for msg in endpoint
                 @async try
-                    JSONRPC.dispatch_msg(endpoint, msg_dispatcher, msg)
+                    DAPRPC.dispatch_msg(endpoint, msg_dispatcher, msg)
                 catch err
                     if error_handler === nothing
                         Base.display_error(err, catch_backtrace())
@@ -133,8 +133,7 @@ function startdebug(socket, error_handler=nothing)
             end
         end
 
-        JSONRPC.send(endpoint, terminated_notification_type, TerminatedEventArguments(missing))
-
+        DAPRPC.send(endpoint, terminated_notification_type, TerminatedEventArguments(false))
 
         @debug "Finished debugging"
     catch err

@@ -1,4 +1,4 @@
-module JSONRPC
+module DAPRPC
 
 import JSON, UUIDs
 

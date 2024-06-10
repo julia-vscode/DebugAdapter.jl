@@ -1,6 +1,6 @@
 abstract type AbstractMessageType end
 
-struct NotificationType{TPARAM} <: AbstractMessageType
+struct EventType{TPARAM} <: AbstractMessageType
     method::String
 end
 
@@ -8,19 +8,19 @@ struct RequestType{TPARAM,TR} <: AbstractMessageType
     method::String
 end
 
-function NotificationType(method::AbstractString, ::Type{TPARAM}) where TPARAM
-    return NotificationType{TPARAM}(method)
+function EventType(method::AbstractString, ::Type{TPARAM}) where TPARAM
+    return EventType{TPARAM}(method)
 end
 
 function RequestType(method::AbstractString, ::Type{TPARAM}, ::Type{TR}) where {TPARAM,TR}
     return RequestType{TPARAM,TR}(method)
 end
 
-get_param_type(::NotificationType{TPARAM}) where {TPARAM} = TPARAM
+get_param_type(::EventType{TPARAM}) where {TPARAM} = TPARAM
 get_param_type(::RequestType{TPARAM,TR}) where {TPARAM,TR} = TPARAM
 get_return_type(::RequestType{TPARAM,TR}) where {TPARAM,TR} = TR
 
-function send(x::JSONRPCEndpoint, request::RequestType{TPARAM,TR}, params::TPARAM) where {TPARAM,TR}
+function send(x::DAPEndpoint, request::RequestType{TPARAM,TR}, params::TPARAM) where {TPARAM,TR}
     res = send_request(x, request.method, params)
     return typed_res(res, TR)::TR
 end
@@ -33,7 +33,7 @@ typed_res(res, TR::Type{<:T}) where {T <: AbstractArray{Any}} = T(res)
 typed_res(res, TR::Type{<:AbstractArray{T}}) where T = T.(res)
 typed_res(res, TR::Type) = TR(res)
 
-function send(x::JSONRPCEndpoint, notification::NotificationType{TPARAM}, params::TPARAM) where TPARAM
+function send(x::DAPEndpoint, notification::EventType{TPARAM}, params::TPARAM) where TPARAM
     send_notification(x, notification.method, params)
 end
 
@@ -55,7 +55,7 @@ function Base.setindex!(dispatcher::MsgDispatcher, func::Function, message_type:
     dispatcher._handlers[message_type.method] = Handler(message_type, func)
 end
 
-function dispatch_msg(x::JSONRPCEndpoint, dispatcher::MsgDispatcher, msg)
+function dispatch_msg(x::DAPEndpoint, dispatcher::MsgDispatcher, msg)
     dispatcher._currentlyHandlingMsg = true
     try
         method_name, request_type = if msg["type"]  == "request"
@@ -89,7 +89,7 @@ function dispatch_msg(x::JSONRPCEndpoint, dispatcher::MsgDispatcher, msg)
             res = handler.func(x, params)
 
             if handler.message_type isa RequestType
-                if res isa JSONRPCError
+                if res isa DAPError
                     send_error_response(x, msg, res.code, res.msg, res.data)
                 elseif res isa get_return_type(handler.message_type)
                     send_success_response(x, msg, res)

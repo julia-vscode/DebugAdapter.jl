@@ -1,97 +1,8 @@
-struct JSONRPCError <: Exception
+struct DAPError <: Exception
     msg::AbstractString
 end
 
-"""
-    SERVER_ERROR_END
-
-The end of the range of server-reserved errors.
-
-These are JSON-RPC server errors that are free for the taking
-for JSON-RPC server implementations. Applications making use of
-this library should NOT define new errors in this range.
-"""
-const SERVER_ERROR_END = -32000
-
-"""
-    SERVER_ERROR_START
-
-The start of the range of server-reserved errors.
-
-These are JSON-RPC server errors that are free for the taking
-for JSON-RPC server implementations. Applications making use of
-this library should NOT define new errors in this range.
-"""
-const SERVER_ERROR_START = -32099
-
-"""
-    PARSE_ERROR
-
-Invalid JSON was received by the server.
-An error occurred on the server while parsing the JSON text.
-"""
-const PARSE_ERROR = -32700
-
-"""
-    INVALID_REQUEST
-
-The JSON sent is not a valid Request object.
-"""
-const INVALID_REQUEST = -32600
-
-"""
-    METHOD_NOT_FOUND
-
-The method does not exist / is not available.
-"""
-const METHOD_NOT_FOUND = -32601
-
-"""
-    INVALID_PARAMS
-
-Invalid method parameter(s).
-"""
-const INVALID_PARAMS = -32602
-
-"""
-    INTERNAL_ERROR
-
-Internal JSON-RPC error.
-"""
-const INTERNAL_ERROR = -32603
-
-"""
-   RPCErrorStrings
-
-A `Base.IdDict` containing the mapping of JSON-RPC error codes to a short, descriptive string.
-
-Use this to hook into `showerror(io::IO, ::JSONRPCError)` for display purposes. A default fallback to `"Unknown"` exists.
-"""
-const RPCErrorStrings = Base.IdDict(
-    PARSE_ERROR => "ParseError",
-    INVALID_REQUEST => "InvalidRequest",
-    METHOD_NOT_FOUND => "MethodNotFound",
-    INVALID_PARAMS => "InvalidParams",
-    INTERNAL_ERROR => "InternalError",
-    [ i => "ServerError" for i in SERVER_ERROR_START:SERVER_ERROR_END]...,
-    -32002 => "ServerNotInitialized",
-    -32001 => "UnknownErrorCode",
-)
-
-function Base.showerror(io::IO, ex::JSONRPCError)
-    error_code_as_string = get(RPCErrorStrings, ex.code, "Unknown")
-
-    print(io, error_code_as_string)
-    print(io, ": ")
-    print(io, ex.msg)
-    if ex.data !== nothing
-        print(io, " (")
-        print(io, ex.data)
-        print(io, ")")
-    end
-end
-
-mutable struct JSONRPCEndpoint{IOIn <: IO,IOOut <: IO}
+mutable struct DAPEndpoint{IOIn <: IO,IOOut <: IO}
     pipe_in::IOIn
     pipe_out::IOOut
 
@@ -110,8 +21,8 @@ mutable struct JSONRPCEndpoint{IOIn <: IO,IOOut <: IO}
     seq::Int
 end
 
-JSONRPCEndpoint(pipe_in, pipe_out, err_handler = nothing) =
-    JSONRPCEndpoint(pipe_in, pipe_out, Channel{Any}(Inf), Channel{Any}(Inf), Dict{String,Channel{Any}}(), err_handler, :idle, nothing, nothing, 0)
+DAPEndpoint(pipe_in, pipe_out, err_handler = nothing) =
+    DAPEndpoint(pipe_in, pipe_out, Channel{Any}(Inf), Channel{Any}(Inf), Dict{String,Channel{Any}}(), err_handler, :idle, nothing, nothing, 0)
 
 function write_transport_layer(stream, response)
     response_utf8 = transcode(UInt8, response)
@@ -146,9 +57,9 @@ function read_transport_layer(stream)
     end
 end
 
-Base.isopen(x::JSONRPCEndpoint) = x.status != :closed && isopen(x.pipe_in) && isopen(x.pipe_out)
+Base.isopen(x::DAPEndpoint) = x.status != :closed && isopen(x.pipe_in) && isopen(x.pipe_out)
 
-function Base.run(x::JSONRPCEndpoint)
+function Base.run(x::DAPEndpoint)
     x.status == :idle || error("Endpoint is not idle.")
 
     x.write_task = @async try
@@ -223,8 +134,7 @@ function Base.run(x::JSONRPCEndpoint)
     x.status = :running
 end
 
-function send_notification(x::JSONRPCEndpoint, method::AbstractString, params)
-    # println("SENDING EVENT ", method)
+function send_notification(x::DAPEndpoint, method::AbstractString, params)
     check_dead_endpoint!(x)
 
     x.seq += 1
@@ -235,15 +145,12 @@ function send_notification(x::JSONRPCEndpoint, method::AbstractString, params)
 
     put!(x.out_msg_queue, message_json)
 
-    # println("WRITE TASK ", x.write_task)
-
     yield()
 
     return nothing
 end
 
-function send_request(x::JSONRPCEndpoint, method::AbstractString, params)
-    # println("SENDING REQUEST ", method)
+function send_request(x::DAPEndpoint, method::AbstractString, params)
     check_dead_endpoint!(x)
 
     x.seq += 1
@@ -263,13 +170,13 @@ function send_request(x::JSONRPCEndpoint, method::AbstractString, params)
         return response["body"]
     elseif response["success"]=="false"
         error_message = response["message"]
-        throw(JSONRPCError(error_message))
+        throw(DAPError(error_message))
     else
-        throw(JSONRPCError("ERROR AT THE TRANSPORT LEVEL"))
+        throw(DAPError("ERROR AT THE TRANSPORT LEVEL"))
     end
 end
 
-function get_next_message(endpoint::JSONRPCEndpoint)
+function get_next_message(endpoint::DAPEndpoint)
     check_dead_endpoint!(endpoint)
 
     msg = take!(endpoint.in_msg_queue)
@@ -277,7 +184,7 @@ function get_next_message(endpoint::JSONRPCEndpoint)
     return msg
 end
 
-function Base.iterate(endpoint::JSONRPCEndpoint, state = nothing)
+function Base.iterate(endpoint::DAPEndpoint, state = nothing)
     check_dead_endpoint!(endpoint)
 
     try
@@ -315,7 +222,7 @@ function send_error_response(endpoint, original_request, code, message, data)
     put!(endpoint.out_msg_queue, response_json)
 end
 
-function Base.close(endpoint::JSONRPCEndpoint)
+function Base.close(endpoint::DAPEndpoint)
     endpoint.status == :closed && return
 
     flush(endpoint)
@@ -331,7 +238,7 @@ function Base.close(endpoint::JSONRPCEndpoint)
     # fetch(endpoint.read_task)
 end
 
-function Base.flush(endpoint::JSONRPCEndpoint)
+function Base.flush(endpoint::DAPEndpoint)
     check_dead_endpoint!(endpoint)
 
     while isready(endpoint.out_msg_queue)

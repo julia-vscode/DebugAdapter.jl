@@ -98,7 +98,7 @@ end
 function send_stopped_msg(conn, ret_val, state)
     if ret_val isa JuliaInterpreter.BreakpointRef
         if ret_val.err === nothing
-            JSONRPC.send(conn, stopped_notification_type, StoppedEventArguments("breakpoint", missing, 1, missing, missing, missing))
+            DAPRPC.send(conn, stopped_notification_type, StoppedEventArguments("breakpoint", missing, 1, missing, missing, missing))
         else
             state.last_exception = ret_val.err
             error_msg = try
@@ -106,11 +106,11 @@ function send_stopped_msg(conn, ret_val, state)
             catch err
                 "Error while displaying the original error."
             end
-            JSONRPC.send(conn, stopped_notification_type, StoppedEventArguments("exception", missing, 1, missing, error_msg, missing))
+            DAPRPC.send(conn, stopped_notification_type, StoppedEventArguments("exception", missing, 1, missing, error_msg, missing))
         end
     elseif ret_val isa Number
-        JSONRPC.send(conn, stopped_notification_type, StoppedEventArguments("step", missing, 1, missing, missing, missing))
+        DAPRPC.send(conn, stopped_notification_type, StoppedEventArguments("step", missing, 1, missing, missing, missing))
     elseif ret_val === nothing
-        JSONRPC.send(conn, stopped_notification_type, StoppedEventArguments("step", missing, 1, missing, missing, missing))
+        DAPRPC.send(conn, stopped_notification_type, StoppedEventArguments("step", missing, 1, missing, missing, missing))
     end
 end

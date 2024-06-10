@@ -48,7 +48,7 @@ end
 function launch_request(conn, state::DebuggerState, params::LaunchArguments)
     # Indicate that we are ready for the initial configuration phase, and then
     # wait for it to finish
-    JSONRPC.send(conn, initialized_notification_type, InitializedEventArguments())
+    DAPRPC.send(conn, initialized_notification_type, InitializedEventArguments())
     take!(state.configuration_done)
 
     Pkg.activate(params.juliaEnv)
@@ -112,9 +112,9 @@ function launch_request(conn, state::DebuggerState, params::LaunchArguments)
         state.frame = next_frame
 
         if params.stopOnEntry
-            JSONRPC.send(conn, stopped_notification_type, StoppedEventArguments("entry", missing, 1, missing, missing, missing))
+            DAPRPC.send(conn, stopped_notification_type, StoppedEventArguments("entry", missing, 1, missing, missing, missing))
         elseif JuliaInterpreter.shouldbreak(state.frame, state.frame.pc)
-            JSONRPC.send(conn, stopped_notification_type, StoppedEventArguments("breakpoint", missing, 1, missing, missing, missing))
+            DAPRPC.send(conn, stopped_notification_type, StoppedEventArguments("breakpoint", missing, 1, missing, missing, missing))
         else
             put!(state.next_cmd, (cmd=:continue,))
         end
@@ -132,7 +132,7 @@ function attach_request(conn, state::DebuggerState, params::JuliaAttachArguments
 
     # Indicate that we are ready for the initial configuration phase, and then
     # wait for it to finish
-    JSONRPC.send(conn, initialized_notification_type, InitializedEventArguments())
+    DAPRPC.send(conn, initialized_notification_type, InitializedEventArguments())
     take!(state.configuration_done)
 
     state.debug_mode = :attach
@@ -150,9 +150,9 @@ function attach_request(conn, state::DebuggerState, params::JuliaAttachArguments
     state.frame = get_next_top_level_frame(state)
 
     if params.stopOnEntry
-        JSONRPC.send(conn, stopped_notification_type, StoppedEventArguments("entry", missing, 1, missing, missing, missing))
+        DAPRPC.send(conn, stopped_notification_type, StoppedEventArguments("entry", missing, 1, missing, missing, missing))
     elseif JuliaInterpreter.shouldbreak(state.frame, state.frame.pc)
-        JSONRPC.send(conn, stopped_notification_type, StoppedEventArguments("breakpoint", missing, 1, missing, missing, missing))
+        DAPRPC.send(conn, stopped_notification_type, StoppedEventArguments("breakpoint", missing, 1, missing, missing, missing))
     else
         put!(state.next_cmd, (cmd = :continue,))
     end
@@ -928,12 +928,12 @@ function set_variable_request(conn, state::DebuggerState, params::SetVariableArg
         parsed = Meta.parse(var_value)
 
         if parsed isa Expr && !(parsed.head == :call || parsed.head == :vect || parsed.head == :tuple)
-            return JSONRPC.JSONRPCError(-32600, "Only values or function calls are allowed.", nothing)
+            return DAPError("Only values or function calls are allowed.")
         end
 
         parsed
     catch err
-        return JSONRPC.JSONRPCError(-32600, string("Something went wrong in the eval: ", sprint(showerror, err)), nothing)
+        return DAPError(string("Something went wrong in the eval: ", sprint(showerror, err)))
     end
 
     var_ref = state.varrefs[varref_id]
@@ -946,7 +946,7 @@ function set_variable_request(conn, state::DebuggerState, params::SetVariableArg
 
             return SetVariableResponseArguments(s.value, s.type, s.variablesReference, s.namedVariables, s.indexedVariables)
         catch err
-            return JSONRPC.JSONRPCError(-32600, string("Something went wrong while setting the variable: ", sprint(showerror, err)), nothing)
+            return DAPError(string("Something went wrong while setting the variable: ", sprint(showerror, err)))
         end
     elseif var_ref.kind == :var
         if isnumeric(var_name[1])
@@ -954,7 +954,7 @@ function set_variable_request(conn, state::DebuggerState, params::SetVariableArg
                 new_val = try
                     Core.eval(Main, val_parsed)
                 catch err
-                    return JSONRPC.JSONRPCError(-32600, string("Expression could not be evaluated: ", sprint(showerror, err)), nothing)
+                    return DAPError(string("Expression could not be evaluated: ", sprint(showerror, err)))
                 end
 
                 idx = Core.eval(Main, Meta.parse("($var_name)"))
@@ -965,17 +965,17 @@ function set_variable_request(conn, state::DebuggerState, params::SetVariableArg
 
                 return SetVariableResponseArguments(s.value, s.type, s.variablesReference, s.namedVariables, s.indexedVariables)
             catch err
-                return JSONRPC.JSONRPCError(-32600, "Something went wrong while setting the variable: $err", nothing)
+                return DAPError("Something went wrong while setting the variable: $err")
             end
         else
             if Base.isimmutable(var_ref.value)
-                return JSONRPC.JSONRPCError(-32600, "Cannot change the fields of an immutable struct.", nothing)
+                return DAPError("Cannot change the fields of an immutable struct.")
             else
                 try
                     new_val = try
                         Core.eval(Main, val_parsed)
                     catch err
-                        return JSONRPC.JSONRPCError(-32600, string("Expression could not be evaluated: ", sprint(showerror, err)), nothing)
+                        return DAPError(string("Expression could not be evaluated: ", sprint(showerror, err)))
                     end
 
                     setfield!(var_ref.value, Symbol(var_name), new_val)
@@ -984,7 +984,7 @@ function set_variable_request(conn, state::DebuggerState, params::SetVariableArg
 
                     return SetVariableResponseArguments(s.value, s.type, s.variablesReference, s.namedVariables, s.indexedVariables)
                 catch err
-                    return JSONRPC.JSONRPCError(-32600, string("Something went wrong while setting the variable: ", sprint(showerror, err)), nothing)
+                    return DAPError(string("Something went wrong while setting the variable: ", sprint(showerror, err)))
                 end
             end
         end
@@ -994,23 +994,23 @@ function set_variable_request(conn, state::DebuggerState, params::SetVariableArg
         elseif var_ref.value isa Module
             var_ref.value
         else
-            return JSONRPC.JSONRPCError(-32600, "No module attached to this global variable.", nothing)
+            return DAPError("No module attached to this global variable.")
         end
 
         if !(mod isa Module)
-            return JSONRPC.JSONRPCError(-32600, "Can't determine the module this variable is defined in.", nothing)
+            return DAPError("Can't determine the module this variable is defined in.")
         end
 
         new_val = try
             mod.eval(Meta.parse("$var_name = $var_value"))
         catch err
-            return JSONRPC.JSONRPCError(-32600, string("Something went wrong while setting the variable: ", sprint(showerror, err)), nothing)
+            return DAPError(string("Something went wrong while setting the variable: ", sprint(showerror, err)))
         end
         s = construct_return_msg_for_var(state::DebuggerState, "", new_val)
 
         return SetVariableResponseArguments(s.value, s.type, s.variablesReference, s.namedVariables, s.indexedVariables)
     else
-        return JSONRPC.JSONRPCError(-32600, "Unknown variable ref type.", nothing)
+        return DAPError("Unknown variable ref type.")
     end
 end
 

@@ -1,8 +1,6 @@
 @dict_readable struct JuliaAttachArguments <: Outbound
     __restart::Union{Missing,Any}
     stopOnEntry::Bool
-    code::String
-    file::String
     compiledModulesOrFunctions::Union{Missing,Vector{String}}
     compiledMode::Union{Missing,Bool}
 end

@@ -15,16 +15,48 @@ include("debugger_utils.jl")
 include("debugger_core.jl")
 include("debugger_requests.jl")
 
-function startdebug(socket, error_handler=nothing)
+function debug_code(debug_session::DebugSession, code::String, file::String)
+    # Wait until the debugger is ready
+    fetch(debug_session.ready)
+
+    debug_session.sources[0] = code
+
+    # @debug "setting source_path" file = params.file
+    put!(debug_session.next_cmd, (cmd = :set_source_path, source_path = file))
+
+    ex = Meta.parse(code)
+    debug_session.expr_splitter = JuliaInterpreter.ExprSplitter(Main, ex) # TODO: line numbers ?
+    debug_session.frame = get_next_top_level_frame(debug_session)
+
+    if isready(debug_session.finished_running_code)
+        take!(debug_session.finished_running_code)
+    end
+
+    if debug_session.stopOnEntry
+        DAPRPC.send(debug_session.endpoint, stopped_notification_type, StoppedEventArguments("entry", missing, 1, missing, missing, missing))
+    elseif JuliaInterpreter.shouldbreak(debug_session.frame, debug_session.frame.pc)
+        DAPRPC.send(debug_session.endpoint, stopped_notification_type, StoppedEventArguments("breakpoint", missing, 1, missing, missing, missing))
+    else
+        put!(debug_session.next_cmd, (cmd = :continue,))
+    end
+
+    take!(debug_session.finished_running_code)
+end
+
+function terminate(debug_session::DebugSession)
+    put!(debug_session.next_cmd, (cmd = :stop,))
+end
+
+function Base.run(state::DebugSession, error_handler=nothing)
     @debug "Connected to debug adapter."
 
     try
 
-        endpoint = DAPRPC.DAPEndpoint(socket, socket, error_handler)
+        endpoint = DAPRPC.DAPEndpoint(state.conn, state.conn, error_handler)
+
+        state.endpoint = endpoint
 
         run(endpoint)
-
-        state = DebuggerState()
 
         msg_dispatcher = DAPRPC.MsgDispatcher()
         msg_dispatcher[disconnect_request_type] = (conn, params) -> disconnect_request(conn, state, params)
@@ -127,6 +159,7 @@ function startdebug(socket, error_handler=nothing)
 
                 if ret === nothing
                     state.debug_mode == :launch && break
+                    put!(state.finished_running_code, true)
                 else
                     send_stopped_msg(endpoint, ret, state)
                 end

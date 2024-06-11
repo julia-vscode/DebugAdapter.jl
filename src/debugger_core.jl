@@ -3,7 +3,9 @@ struct VariableReference
     value
 end
 
-mutable struct DebuggerState
+mutable struct DebugSession
+    conn
+    endpoint::Union{Nothing,DAPRPC.DAPEndpoint}
     last_exception
     expr_splitter::Union{JuliaInterpreter.ExprSplitter,Nothing}
     frame
@@ -16,9 +18,12 @@ mutable struct DebuggerState
     next_cmd::Channel{Any}
     not_yet_set_compiled_items::Vector{String}
     configuration_done::Channel{Bool}
+    stopOnEntry::Bool
+    ready::Channel{Bool}
+    finished_running_code::Channel{Bool}
 
-    function DebuggerState()
-        return new(nothing, nothing, nothing, Set{String}(), :unknown, JuliaInterpreter.finish_and_return!, Dict{Int,String}(), 1, VariableReference[], Channel{Any}(Inf), String[], Channel{Bool}(1))
+    function DebugSession(conn)
+        return new(conn, nothing, nothing, nothing, nothing, Set{String}(), :unknown, JuliaInterpreter.finish_and_return!, Dict{Int,String}(), 1, VariableReference[], Channel{Any}(Inf), String[], Channel{Bool}(1), false, Channel{Bool}(1), Channel{Bool}(1))
     end
 end
 

@@ -79,8 +79,6 @@ function launch_request(conn, state::DebugSession, params::LaunchArguments)
 
         @debug "We are debugging the file $filename_to_debug."
 
-        put!(state.next_cmd, (cmd=:set_source_path, source_path=filename_to_debug))
-
         file_content = try
             read(filename_to_debug, String)
         catch err
@@ -89,35 +87,12 @@ function launch_request(conn, state::DebugSession, params::LaunchArguments)
             return LaunchResponseArguments()
         end
 
-        ex = Base.parse_input_line(file_content; filename=filename_to_debug)
-
-        # handle a case when lowering fails
-        if !is_valid_expression(ex)
-            # TODO Think about some way to return an error message in the UI
-            put!(state.next_cmd, (cmd=:stop,))
-            return LaunchResponseArguments()
-        end
-
         params.compiledModulesOrFunctions !== missing && set_compiled_items_request(conn, state, (compiledModulesOrFunctions=params.compiledModulesOrFunctions,))
         params.compiledMode !== missing && set_compiled_mode_request(conn, state, (compiledMode=params.compiledMode,))
 
-        state.expr_splitter = JuliaInterpreter.ExprSplitter(Main, ex)
-        next_frame = get_next_top_level_frame(state)
+        state.stopOnEntry = params.stopOnEntry
 
-        if next_frame === nothing
-            put!(state.next_cmd, (cmd=:stop,))
-            return LaunchResponseArguments()
-        end
-
-        state.frame = next_frame
-
-        if params.stopOnEntry
-            DAPRPC.send(conn, stopped_notification_type, StoppedEventArguments("entry", missing, 1, missing, missing, missing))
-        elseif JuliaInterpreter.shouldbreak(state.frame, state.frame.pc)
-            DAPRPC.send(conn, stopped_notification_type, StoppedEventArguments("breakpoint", missing, 1, missing, missing, missing))
-        else
-            put!(state.next_cmd, (cmd=:continue,))
-        end
+        debug_code(state, file_content, filename_to_debug)
 
         return LaunchResponseArguments()
     end

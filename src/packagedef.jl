@@ -24,9 +24,22 @@ function debug_code(debug_session::DebugSession, code::String, file::String)
     # @debug "setting source_path" file = params.file
     put!(debug_session.next_cmd, (cmd = :set_source_path, source_path = file))
 
-    ex = Meta.parse(code)
+    ex = Base.parse_input_line(code; filename=file)
+
+    # handle a case when lowering fails
+    if !is_valid_expression(ex)
+        # TODO Think about some way to return an error message in the UI
+        put!(debug_session.next_cmd, (cmd=:stop,))
+        return LaunchResponseArguments()
+    end
+
     debug_session.expr_splitter = JuliaInterpreter.ExprSplitter(Main, ex) # TODO: line numbers ?
     debug_session.frame = get_next_top_level_frame(debug_session)
+
+    if debug_session.frame === nothing
+        put!(debug_session.next_cmd, (cmd=:stop,))
+        return LaunchResponseArguments()
+    end
 
     if isready(debug_session.finished_running_code)
         take!(debug_session.finished_running_code)

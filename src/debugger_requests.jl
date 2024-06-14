@@ -1,6 +1,6 @@
 # Request handlers
 
-function initialize_request(conn, state::DebugSession, params::InitializeRequestArguments)
+function initialize_request(conn, debug_session::DebugSession, params::InitializeRequestArguments)
     return Capabilities(
         true, # supportsConfigurationDoneRequest::Union{Missing,Bool}
         true, # supportsFunctionBreakpoints::Union{Missing,Bool}
@@ -40,8 +40,8 @@ function initialize_request(conn, state::DebugSession, params::InitializeRequest
         # response.body.supportsConditionalBreakpoints = true
 end
 
-function configuration_done_request(conn, state, params::Union{Nothing,ConfigurationDoneArguments})
-    put!(state.configuration_done, true)
+function configuration_done_request(conn, debug_session::DebugSession, params::Union{Nothing,ConfigurationDoneArguments})
+    put!(debug_session.configuration_done, true)
     return ConfigurationDoneResponseArguments()
 end
 
@@ -97,7 +97,7 @@ function launch_request(conn, debug_session::DebugSession, params::LaunchArgumen
 
         debug_session.stop_on_entry = params.stopOnEntry
 
-        put!(debug_session.next_cmd, (cmd=:debug, code=file_content, filename=filename_to_debug))
+        put!(debug_session.next_cmd, (cmd=:debug, mod=Main, code=file_content, filename=filename_to_debug))
 
         return LaunchResponseArguments()
     end
@@ -181,7 +181,7 @@ function set_break_points_request(conn, debug_session::DebugSession, params::Set
     SetBreakpointsResponseArguments([Breakpoint(true) for _ in params.breakpoints])
 end
 
-function set_exception_break_points_request(conn, state::DebugSession, params::SetExceptionBreakpointsArguments)
+function set_exception_break_points_request(conn, debug_session::DebugSession, params::SetExceptionBreakpointsArguments)
     @debug "setexceptionbreakpoints_request"
 
     opts = Set(params.filters)
@@ -201,7 +201,7 @@ function set_exception_break_points_request(conn, state::DebugSession, params::S
     return SetExceptionBreakpointsResponseArguments(String[], missing)
 end
 
-function set_function_break_points_request(conn, state::DebugSession, params::SetFunctionBreakpointsArguments)
+function set_function_break_points_request(conn, debug_session::DebugSession, params::SetFunctionBreakpointsArguments)
     @debug "setfunctionbreakpoints_request"
 
     bps = map(params.breakpoints) do i
@@ -256,10 +256,10 @@ function set_function_break_points_request(conn, state::DebugSession, params::Se
 
     bps = filter(i -> i !== nothing, bps)
 
-    state.function_breakpoints = bps
+    debug_session.function_breakpoints = bps
 
-    if state.debug_engine!==nothing
-        DebugEngines.set_function_breakpoints!(state.debug_engine, state.function_breakpoints)
+    if debug_session.debug_engine!==nothing
+        DebugEngines.set_function_breakpoints!(debug_session.debug_engine, debug_session.function_breakpoints)
     end
 
     return SetFunctionBreakpointsResponseArguments([Breakpoint(true) for i = 1:length(bps)])
@@ -272,12 +272,12 @@ function sfHint(frame, meth_or_mod_name)
     return missing
 end
 
-function stack_trace_request(conn, state::DebugSession, params::StackTraceArguments)
+function stack_trace_request(conn, debug_session::DebugSession, params::StackTraceArguments)
     @debug "getstacktrace_request"
 
     frames = StackFrame[]
     # TODO Move all of this into DebugEngine
-    fr = state.debug_engine.frame
+    fr = debug_session.debug_engine.frame
 
     if fr === nothing
         @debug fr
@@ -357,7 +357,7 @@ function stack_trace_request(conn, state::DebugSession, params::StackTraceArgume
         elseif curr_scopeof isa Method
             ret = JuliaInterpreter.CodeTracking.definition(String, curr_fr.framecode.scope)
             if ret !== nothing
-                state.sources[state.next_source_id], loc = ret
+                debug_session.sources[debug_session.next_source_id], loc = ret
                 push!(
                     frames,
                     StackFrame(
@@ -366,7 +366,7 @@ function stack_trace_request(conn, state::DebugSession, params::StackTraceArgume
                         Source(
                             file_name,
                             missing,
-                            state.next_source_id,
+                            debug_session.next_source_id,
                             source_hint,
                             source_origin,
                             missing,
@@ -382,7 +382,7 @@ function stack_trace_request(conn, state::DebugSession, params::StackTraceArgume
                         sf_hint
                     )
                 )
-                state.next_source_id += 1
+                debug_session.next_source_id += 1
             else
                 src = curr_fr.framecode.src
                 @static if isdefined(JuliaInterpreter, :copy_codeinfo)
@@ -393,7 +393,7 @@ function stack_trace_request(conn, state::DebugSession, params::StackTraceArgume
                 JuliaInterpreter.replace_coretypes!(src; rev = true)
                 code = Base.invokelatest(JuliaInterpreter.framecode_lines, src)
 
-                state.sources[state.next_source_id] = join(code, '\n')
+                debug_session.sources[debug_session.next_source_id] = join(code, '\n')
 
                 push!(
                     frames,
@@ -403,7 +403,7 @@ function stack_trace_request(conn, state::DebugSession, params::StackTraceArgume
                         Source(
                             file_name,
                             missing,
-                            state.next_source_id,
+                            debug_session.next_source_id,
                             source_hint,
                             source_origin,
                             missing,
@@ -419,7 +419,7 @@ function stack_trace_request(conn, state::DebugSession, params::StackTraceArgume
                         sf_hint
                     )
                 )
-                state.next_source_id += 1
+                debug_session.next_source_id += 1
             end
         else
             # For now we are assuming that this can only happen
@@ -458,11 +458,11 @@ function stack_trace_request(conn, state::DebugSession, params::StackTraceArgume
     return StackTraceResponseArguments(frames, length(frames))
 end
 
-function scopes_request(conn, state::DebugSession, params::ScopesArguments)
+function scopes_request(conn, debug_session::DebugSession, params::ScopesArguments)
     @debug "getscope_request"
-    empty!(state.varrefs)
+    empty!(debug_session.varrefs)
 
-    curr_fr = JuliaInterpreter.leaf(state.debug_engine.frame)
+    curr_fr = JuliaInterpreter.leaf(debug_session.debug_engine.frame)
 
     i = 1
 
@@ -477,11 +477,11 @@ function scopes_request(conn, state::DebugSession, params::ScopesArguments)
     file_name = curr_whereis[1]
     code_range = curr_scopeof isa Method ? JuliaInterpreter.compute_corrected_linerange(curr_scopeof) : nothing
 
-    push!(state.varrefs, VariableReference(:scope, curr_fr))
-    local_var_ref_id = length(state.varrefs)
+    push!(debug_session.varrefs, VariableReference(:scope, curr_fr))
+    local_var_ref_id = length(debug_session.varrefs)
 
-    push!(state.varrefs, VariableReference(:scope_globals, curr_fr))
-    global_var_ref_id = length(state.varrefs)
+    push!(debug_session.varrefs, VariableReference(:scope_globals, curr_fr))
+    global_var_ref_id = length(debug_session.varrefs)
 
     scopes = []
 
@@ -494,22 +494,22 @@ function scopes_request(conn, state::DebugSession, params::ScopesArguments)
     end
 
     curr_mod = JuliaInterpreter.moduleof(curr_fr)
-    push!(state.varrefs, VariableReference(:module, curr_mod))
+    push!(debug_session.varrefs, VariableReference(:module, curr_mod))
 
-    push!(scopes, Scope(name = "Global ($(curr_mod))", variablesReference = length(state.varrefs), expensive = true))
+    push!(scopes, Scope(name = "Global ($(curr_mod))", variablesReference = length(debug_session.varrefs), expensive = true))
 
     return ScopesResponseArguments(scopes)
 end
 
-function source_request(conn, state::DebugSession, params::SourceArguments)
+function source_request(conn, debug_session::DebugSession, params::SourceArguments)
     @debug "getsource_request"
 
     source_id = params.source.sourceReference
 
-    return SourceResponseArguments(state.sources[source_id], missing)
+    return SourceResponseArguments(debug_session.sources[source_id], missing)
 end
 
-function construct_return_msg_for_var(state::DebugSession, name, value)
+function construct_return_msg_for_var(debug_session::DebugSession, name, value)
     v_type = typeof(value)
     v_value_as_string = try
         Base.invokelatest(sprintlimited, value)
@@ -519,8 +519,8 @@ function construct_return_msg_for_var(state::DebugSession, name, value)
     end
 
     if (isstructtype(v_type) || value isa AbstractArray || value isa AbstractDict) && !(value isa String || value isa Symbol)
-        push!(state.varrefs, VariableReference(:var, value))
-        new_var_id = length(state.varrefs)
+        push!(debug_session.varrefs, VariableReference(:var, value))
+        new_var_id = length(debug_session.varrefs)
 
         named_count = if value isa Array || value isa Tuple
             0
@@ -552,7 +552,7 @@ function construct_return_msg_for_var(state::DebugSession, name, value)
     end
 end
 
-function construct_return_msg_for_var_with_undef_value(state::DebugSession, name)
+function construct_return_msg_for_var_with_undef_value(debug_session::DebugSession, name)
     v_type_as_string = ""
 
     return Variable(name = name, type = v_type_as_string, value = "#undef", variablesReference = 0)
@@ -602,7 +602,7 @@ end
 collect_global_refs(expr, refs) = nothing
 collect_global_refs(expr::GlobalRef, refs) = push!(refs, expr)
 
-function push_module_names!(variables, state, mod)
+function push_module_names!(variables, debug_session, mod)
     for n in names(mod, all = true)
         !isdefined(mod, n) && continue
         Base.isdeprecated(mod, n) && continue
@@ -613,11 +613,11 @@ function push_module_names!(variables, state, mod)
         s = string(n)
         startswith(s, "#") && continue
 
-        push!(variables, construct_return_msg_for_var(state, s, x))
+        push!(variables, construct_return_msg_for_var(debug_session, s, x))
     end
 end
 
-function variables_request(conn, state::DebugSession, params::VariablesArguments)
+function variables_request(conn, debug_session::DebugSession, params::VariablesArguments)
     @debug "getvariables_request"
 
     var_ref_id = params.variablesReference
@@ -626,7 +626,7 @@ function variables_request(conn, state::DebugSession, params::VariablesArguments
     skip_count = coalesce(params.start, 0)
     take_count = coalesce(params.count, typemax(Int))
 
-    var_ref = state.varrefs[var_ref_id]
+    var_ref = debug_session.varrefs[var_ref_id]
 
     variables = Variable[]
 
@@ -639,13 +639,13 @@ function variables_request(conn, state::DebugSession, params::VariablesArguments
             # TODO Figure out why #self# is here in the first place
             # For now we don't report it to the client
             if !startswith(string(v.name), "#") && string(v.name) != ""
-                push!(variables, construct_return_msg_for_var(state, string(v.name), v.value))
+                push!(variables, construct_return_msg_for_var(debug_session, string(v.name), v.value))
             end
         end
 
         if JuliaInterpreter.isexpr(JuliaInterpreter.pc_expr(curr_fr), :return)
             ret_val = JuliaInterpreter.get_return(curr_fr)
-            push!(variables, construct_return_msg_for_var(state, "Return Value", ret_val))
+            push!(variables, construct_return_msg_for_var(debug_session, "Return Value", ret_val))
         end
     elseif var_ref.kind == :scope_globals
         curr_fr = var_ref.value
@@ -653,19 +653,19 @@ function variables_request(conn, state::DebugSession, params::VariablesArguments
 
         for g in globals
             if isdefined(g.mod, g.name)
-                push!(variables, construct_return_msg_for_var(state, string(g.name), getfield(g.mod, g.name)))
+                push!(variables, construct_return_msg_for_var(debug_session, string(g.name), getfield(g.mod, g.name)))
             end
         end
     elseif var_ref.kind == :module
-        push_module_names!(variables, state, var_ref.value)
+        push_module_names!(variables, debug_session, var_ref.value)
     elseif var_ref.kind == :var
         container_type = typeof(var_ref.value)
 
         if filter_type == "" || filter_type == "named"
             if (var_ref.value isa AbstractArray || var_ref.value isa AbstractDict) && !(var_ref.value isa Array) &&
                 fieldcount(container_type) > 0
-                push!(state.varrefs, VariableReference(:fields, var_ref.value))
-                new_var_id = length(state.varrefs)
+                push!(debug_session.varrefs, VariableReference(:fields, var_ref.value))
+                new_var_id = length(debug_session.varrefs)
                 named_count = fieldcount(container_type)
 
                 push!(variables, Variable(
@@ -680,12 +680,12 @@ function variables_request(conn, state::DebugSession, params::VariablesArguments
                     missing
                 ))
             elseif var_ref.value isa Module
-                push_module_names!(variables, state, var_ref.value)
+                push_module_names!(variables, debug_session, var_ref.value)
             else
                 for i = Iterators.take(Iterators.drop(1:fieldcount(container_type), skip_count), take_count)
                     s = isdefined(var_ref.value, i) ?
-                        construct_return_msg_for_var(state, string(fieldname(container_type, i)), getfield(var_ref.value, i)) :
-                        construct_return_msg_for_var_with_undef_value(state, string(fieldname(container_type, i)))
+                        construct_return_msg_for_var(debug_session, string(fieldname(container_type, i)), getfield(var_ref.value, i)) :
+                        construct_return_msg_for_var_with_undef_value(debug_session, string(fieldname(container_type, i)))
                     push!(variables, s)
                 end
             end
@@ -695,7 +695,7 @@ function variables_request(conn, state::DebugSession, params::VariablesArguments
             try
                 if var_ref.value isa Tuple
                     for i in Iterators.take(Iterators.drop(1:length(var_ref.value), skip_count), take_count)
-                        s = construct_return_msg_for_var(state, join(string.(i), ','), var_ref.value[i])
+                        s = construct_return_msg_for_var(debug_session, join(string.(i), ','), var_ref.value[i])
                         push!(variables, s)
                     end
                 elseif var_ref.value isa AbstractArray
@@ -703,7 +703,7 @@ function variables_request(conn, state::DebugSession, params::VariablesArguments
                         s = ""
                         try
                             val = Base.invokelatest(getindex, var_ref.value, i)
-                            s = construct_return_msg_for_var(state, join(string.(i.I), ','), val)
+                            s = construct_return_msg_for_var(debug_session, join(string.(i.I), ','), val)
                         catch err
                             s = Variable(name = join(string.(i.I), ','), type = "", value = "#error", variablesReference = 0)
                         end
@@ -719,7 +719,7 @@ function variables_request(conn, state::DebugSession, params::VariablesArguments
                         s = ""
                         try
                             val = Base.invokelatest(getindex, var_ref.value, i)
-                            s = construct_return_msg_for_var(state, key_as_string, val)
+                            s = construct_return_msg_for_var(debug_session, key_as_string, val)
                         catch err
                             s = Variable(
                                 join(string.(i.I), ','),
@@ -756,8 +756,8 @@ function variables_request(conn, state::DebugSession, params::VariablesArguments
         if filter_type == "" || filter_type == "named"
             for i = Iterators.take(Iterators.drop(1:fieldcount(container_type), skip_count), take_count)
                 s = isdefined(var_ref.value, i) ?
-                    construct_return_msg_for_var(state, string(fieldname(container_type, i)), getfield(var_ref.value, i)) :
-                    construct_return_msg_for_var_with_undef_value(state, string(fieldname(container_type, i)))
+                    construct_return_msg_for_var(debug_session, string(fieldname(container_type, i)), getfield(var_ref.value, i)) :
+                    construct_return_msg_for_var_with_undef_value(debug_session, string(fieldname(container_type, i)))
                 push!(variables, s)
             end
         end
@@ -767,7 +767,7 @@ function variables_request(conn, state::DebugSession, params::VariablesArguments
     return VariablesResponseArguments(variables)
 end
 
-function set_variable_request(conn, state::DebugSession, params::SetVariableArguments)
+function set_variable_request(conn, debug_session::DebugSession, params::SetVariableArguments)
     varref_id = params.variablesReference
     var_name = params.name
     var_value = params.value
@@ -784,13 +784,13 @@ function set_variable_request(conn, state::DebugSession, params::SetVariableArgu
         return DAPError(string("Something went wrong in the eval: ", sprint(showerror, err)))
     end
 
-    var_ref = state.varrefs[varref_id]
+    var_ref = debug_session.varrefs[varref_id]
 
     if var_ref.kind == :scope
         try
             ret = JuliaInterpreter.eval_code(var_ref.value, "$var_name = $var_value");
 
-            s = construct_return_msg_for_var(state::DebugSession, "", ret)
+            s = construct_return_msg_for_var(debug_session::DebugSession, "", ret)
 
             return SetVariableResponseArguments(s.value, s.type, s.variablesReference, s.namedVariables, s.indexedVariables)
         catch err
@@ -809,7 +809,7 @@ function set_variable_request(conn, state::DebugSession, params::SetVariableArgu
 
                 setindex!(var_ref.value, new_val, idx...)
 
-                s = construct_return_msg_for_var(state::DebugSession, "", new_val)
+                s = construct_return_msg_for_var(debug_session::DebugSession, "", new_val)
 
                 return SetVariableResponseArguments(s.value, s.type, s.variablesReference, s.namedVariables, s.indexedVariables)
             catch err
@@ -828,7 +828,7 @@ function set_variable_request(conn, state::DebugSession, params::SetVariableArgu
 
                     setfield!(var_ref.value, Symbol(var_name), new_val)
 
-                    s = construct_return_msg_for_var(state::DebugSession, "", new_val)
+                    s = construct_return_msg_for_var(debug_session::DebugSession, "", new_val)
 
                     return SetVariableResponseArguments(s.value, s.type, s.variablesReference, s.namedVariables, s.indexedVariables)
                 catch err
@@ -854,7 +854,7 @@ function set_variable_request(conn, state::DebugSession, params::SetVariableArgu
         catch err
             return DAPError(string("Something went wrong while setting the variable: ", sprint(showerror, err)))
         end
-        s = construct_return_msg_for_var(state::DebugSession, "", new_val)
+        s = construct_return_msg_for_var(debug_session::DebugSession, "", new_val)
 
         return SetVariableResponseArguments(s.value, s.type, s.variablesReference, s.namedVariables, s.indexedVariables)
     else
@@ -862,10 +862,10 @@ function set_variable_request(conn, state::DebugSession, params::SetVariableArgu
     end
 end
 
-function restart_frame_request(conn, state::DebugSession, params::RestartFrameArguments)
+function restart_frame_request(conn, debug_session::DebugSession, params::RestartFrameArguments)
     frame_id = params.frameId
 
-    curr_fr = JuliaInterpreter.leaf(state.frame)
+    curr_fr = JuliaInterpreter.leaf(debug_session.frame)
 
         i = 1
 
@@ -877,26 +877,26 @@ function restart_frame_request(conn, state::DebugSession, params::RestartFrameAr
     if curr_fr.caller === nothing
         # We are in the top level
 
-        state.frame = get_next_top_level_frame(state)
+        debug_session.frame = get_next_top_level_frame(debug_session)
     else
         curr_fr.pc = 1
         curr_fr.assignment_counter = 1
         curr_fr.callee = nothing
 
-        state.frame = curr_fr
+        debug_session.frame = curr_fr
     end
 
-    put!(state.next_cmd, (cmd = :continue,))
+    put!(debug_session.next_cmd, (cmd = :continue,))
 
     return RestartFrameResponseResponseArguments()
 end
 
-function exception_info_request(conn, state::DebugSession, params::ExceptionInfoArguments)
-    exception_id = string(typeof(state.last_exception))
-    exception_description = Base.invokelatest(sprint, Base.showerror, state.last_exception)
+function exception_info_request(conn, debug_session::DebugSession, params::ExceptionInfoArguments)
+    exception_id = string(typeof(debug_session.debug_engine.last_exception))
+    exception_description = Base.invokelatest(sprint, Base.showerror, debug_session.debug_engine.last_exception)
 
     exception_stacktrace = try
-        Base.invokelatest(sprint, Base.show_backtrace, state.frame)
+        Base.invokelatest(sprint, Base.show_backtrace, debug_session.debug_engine.frame)
     catch err
         "Error while printing the backtrace."
     end
@@ -904,10 +904,10 @@ function exception_info_request(conn, state::DebugSession, params::ExceptionInfo
     return ExceptionInfoResponseArguments(exception_id, exception_description, "userUnhandled", ExceptionDetails(missing, missing, missing, missing, exception_stacktrace, missing))
 end
 
-function evaluate_request(conn, state::DebugSession, params::EvaluateArguments)
+function evaluate_request(conn, debug_session::DebugSession, params::EvaluateArguments)
     @debug "evaluate_request"
 
-    curr_fr = state.debug_engine.frame
+    curr_fr = debug_session.debug_engine.frame
     curr_i = 1
 
     while params.frameId > curr_i
@@ -929,68 +929,68 @@ function evaluate_request(conn, state::DebugSession, params::EvaluateArguments)
     end
 end
 
-function continue_request(conn, state::DebugSession, params::ContinueArguments)
+function continue_request(conn, debug_session::DebugSession, params::ContinueArguments)
     @debug "continue_request"
 
-    DebugEngines.execution_continue(state.debug_engine)
+    DebugEngines.execution_continue(debug_session.debug_engine)
 
     return ContinueResponseArguments(true)
 end
 
-function next_request(conn, state::DebugSession, params::NextArguments)
+function next_request(conn, debug_session::DebugSession, params::NextArguments)
     @debug "next_request"
 
-    DebugEngines.execution_next(state.debug_engine)
+    DebugEngines.execution_next(debug_session.debug_engine)
 
     return NextResponseArguments()
 end
 
-function setp_in_request(conn, state::DebugSession, params::StepInArguments)
+function setp_in_request(conn, debug_session::DebugSession, params::StepInArguments)
     @debug "stepin_request"
 
-    DebugEngines.execution_step_in(state.debug_engine, params.targetId)
+    DebugEngines.execution_step_in(debug_session.debug_engine, params.targetId)
 
     return StepInResponseArguments()
 end
 
-function step_in_targets_request(conn, state::DebugSession, params::StepInTargetsArguments)
+function step_in_targets_request(conn, debug_session::DebugSession, params::StepInTargetsArguments)
     @debug "stepin_targets_request"
 
-    targets = calls_on_line(state)
+    targets = calls_on_line(debug_session)
 
     return StepInTargetsResponseArguments([
         StepInTarget(pc, string(expr)) for (pc, expr) in targets
     ])
 end
 
-function setp_out_request(conn, state::DebugSession, params::StepOutArguments)
+function setp_out_request(conn, debug_session::DebugSession, params::StepOutArguments)
     @debug "stepout_request"
 
-    DebugEngines.execution_step_out(state.debug_engine)
+    DebugEngines.execution_step_out(debug_session.debug_engine)
 
     return StepOutResponseArguments()
 end
 
-function disconnect_request(conn, state::DebugSession, params::DisconnectArguments)
+function disconnect_request(conn, debug_session::DebugSession, params::DisconnectArguments)
     @debug "disconnect_request"
 
-    put!(state.next_cmd, (cmd = :terminate,))
+    put!(debug_session.next_cmd, (cmd = :terminate,))
 
     return DisconnectResponseArguments()
 end
 
-function terminate_request(conn, state::DebugSession, params::TerminateArguments)
+function terminate_request(conn, debug_session::DebugSession, params::TerminateArguments)
     @debug "terminate_request"
 
-    DebugEngines.execution_terminate(state.debug_engine)
+    DebugEngines.execution_terminate(debug_session.debug_engine)
 
     return TerminateResponseArguments()
 end
 
-function threads_request(conn, state::DebugSession, params::Nothing)
+function threads_request(conn, debug_session::DebugSession, params::Nothing)
     return ThreadsResponseArguments([Thread(id = 1, name = "Main Thread")])
 end
 
-function breakpointlocations_request(conn, state::DebugSession, params::BreakpointLocationsArguments)
+function breakpointlocations_request(conn, debug_session::DebugSession, params::BreakpointLocationsArguments)
     return BreakpointLocationsResponseArguments(BreakpointLocation[])
 end

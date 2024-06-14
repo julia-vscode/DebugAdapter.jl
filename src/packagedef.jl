@@ -135,6 +135,10 @@ function Base.run(debug_session::DebugSession, error_handler=nothing)
                     break
                 end
             elseif next_cmd.cmd == :debug
+                if startswith(next_cmd.filename, "REPL[1]")
+                    debug_session.sources[0] = next_cmd.code
+                end
+
                 debug_session.debug_engine = DebugEngines.DebugEngine(
                     next_cmd.mod,
                     next_cmd.code,

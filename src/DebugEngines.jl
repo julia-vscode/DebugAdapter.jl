@@ -273,8 +273,6 @@ is_valid_expression(::Nothing) = false # empty
 is_valid_expression(ex::Expr) = !Meta.isexpr(ex, (:incomplete, :error))
 
 function Base.run(debug_engine::DebugEngine)
-    # TODO debug_engine.sources[0] = debug_engine.code
-
     # @debug "setting source_path" file = params.file
     task_local_storage()[:SOURCE_PATH] = debug_engine.filename
 

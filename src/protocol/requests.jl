@@ -219,3 +219,13 @@ end
 @dict_readable struct BreakpointLocationsResponseArguments <: Outbound
     breakpoints::Vector{BreakpointLocation}
 end
+
+# Our own extensions
+
+@dict_readable struct SetCompiledItemsArguments <: Outbound
+    compiledModulesOrFunctions::Vector{String}
+end
+
+@dict_readable struct SetCompiledModeArguments <: Outbound
+    compiledMode::Bool
+end

@@ -1,6 +1,6 @@
 module DAPRPC
 
-import JSON, UUIDs
+import JSON
 
 include("packagedef.jl")
 

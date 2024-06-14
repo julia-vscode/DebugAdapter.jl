@@ -43,5 +43,5 @@ end
 
 
 # Our own requests
-const set_compiled_items_notification_type = DAPRPC.EventType("setCompiledItems", NamedTuple{(:compiledModulesOrFunctions,),Tuple{Vector{String}}})
-const set_compiled_mode_notification_type = DAPRPC.EventType("setCompiledMode", NamedTuple{(:compiledMode,),Tuple{Bool}})
+const set_compiled_items_notification_type = DAPRPC.EventType("setCompiledItems", SetCompiledItemsArguments)
+const set_compiled_mode_notification_type = DAPRPC.EventType("setCompiledMode", SetCompiledModeArguments)

@@ -45,11 +45,11 @@ function configuration_done_request(conn, state, params::Union{Nothing,Configura
     return ConfigurationDoneResponseArguments()
 end
 
-function launch_request(conn, state::DebugSession, params::LaunchArguments)
+function launch_request(conn, debug_session::DebugSession, params::LaunchArguments)
     # Indicate that we are ready for the initial configuration phase, and then
     # wait for it to finish
     DAPRPC.send(conn, initialized_notification_type, InitializedEventArguments())
-    take!(state.configuration_done)
+    take!(debug_session.configuration_done)
 
     Pkg.activate(params.juliaEnv)
 
@@ -65,15 +65,15 @@ function launch_request(conn, state::DebugSession, params::LaunchArguments)
     end
 
     if params.noDebug === true
-        state.debug_mode = :launch
+        debug_session.terminate_on_finish = true
         filename_to_debug = isabspath(params.program) ? params.program : joinpath(pwd(), params.program)
-        put!(state.next_cmd, (cmd = :run, program = filename_to_debug))
+        put!(debug_session.next_cmd, (cmd = :run, program = filename_to_debug))
 
         return LaunchResponseArguments()
     else
         @debug "debug_request" params = params
 
-        state.debug_mode = :launch
+        debug_session.terminate_on_finish = true
 
         filename_to_debug = isabspath(params.program) ? params.program : joinpath(pwd(), params.program)
 
@@ -83,218 +83,83 @@ function launch_request(conn, state::DebugSession, params::LaunchArguments)
             read(filename_to_debug, String)
         catch err
             # TODO Think about some way to return an error message in the UI
-            put!(state.next_cmd, (cmd=:stop,))
+            put!(debug_session.next_cmd, (cmd=:stop,))
             return LaunchResponseArguments()
         end
 
-        params.compiledModulesOrFunctions !== missing && set_compiled_items_request(conn, state, (compiledModulesOrFunctions=params.compiledModulesOrFunctions,))
-        params.compiledMode !== missing && set_compiled_mode_request(conn, state, (compiledMode=params.compiledMode,))
+        if params.compiledModulesOrFunctions !== missing
+            debug_session.compiled_modules_or_functions = params.compiledModulesOrFunctions
+        end
 
-        state.stopOnEntry = params.stopOnEntry
+        if params.compiledMode !== missing
+            debug_session.compiled_mode = params.compiledMode
+        end
 
-        debug_code(state, file_content, filename_to_debug)
+        debug_session.stop_on_entry = params.stopOnEntry
+
+        put!(debug_session.next_cmd, (cmd=:debug, code=file_content, filename=filename_to_debug))
 
         return LaunchResponseArguments()
     end
 end
 
-is_valid_expression(x) = true # atom
-is_valid_expression(::Nothing) = false # empty
-is_valid_expression(ex::Expr) = !Meta.isexpr(ex, (:incomplete, :error))
 
-function attach_request(conn, state::DebugSession, params::JuliaAttachArguments)
+
+function attach_request(conn, debug_session::DebugSession, params::JuliaAttachArguments)
     @debug "attach_request" params = params
 
     # Indicate that we are ready for the initial configuration phase, and then
     # wait for it to finish
     DAPRPC.send(conn, initialized_notification_type, InitializedEventArguments())
-    take!(state.configuration_done)
+    take!(debug_session.configuration_done)
 
-    state.debug_mode = :attach
+    debug_session.stop_on_entry = params.stopOnEntry
 
-    params.compiledModulesOrFunctions !== missing && set_compiled_items_request(conn, state, (compiledModulesOrFunctions = params.compiledModulesOrFunctions,))
-    params.compiledMode !== missing && set_compiled_mode_request(conn, state, (compiledMode = params.compiledMode,))
+    if params.compiledModulesOrFunctions !== missing
+        debug_session.compiled_modules_or_functions = params.compiledModulesOrFunctions
+    end
 
-    state.stopOnEntry = params.stopOnEntry
+    if params.compiledMode !== missing
+        debug_session.compiled_mode = params.compiledMode
+    end
 
-    put!(state.ready, true)
+    put!(debug_session.attached, true)
+
     return AttachResponseArguments()
 end
 
-function reset_compiled_items()
-    @debug "reset_compiled_items"
-    # reset compiled modules/methods
-    empty!(JuliaInterpreter.compiled_modules)
-    empty!(JuliaInterpreter.compiled_methods)
-    empty!(JuliaInterpreter.interpreted_methods)
-    JuliaInterpreter.set_compiled_methods()
-    JuliaInterpreter.clear_caches()
-end
 
-function set_compiled_items_request(conn, state::DebugSession, params)
+
+function set_compiled_items_request(conn, debug_session::DebugSession, params::SetCompiledItemsArguments)
     @debug "set_compiled_items_request"
-    reset_compiled_items()
-    state.not_yet_set_compiled_items = set_compiled_functions_modules!(params)
+
+    debug_session.compiled_modules_or_functions = params.compiledModulesOrFunctions
+
+    if debug_session.debug_engine!==nothing
+        DebugEngines.set_compiled_functions_modules!(debug_session.debug_engine, debug_session.compiled_modules_or_functions)
+    end
 end
 
-function set_compiled_mode_request(conn, state::DebugSession, params)
+function set_compiled_mode_request(conn, debug_session::DebugSession, params::SetCompiledModeArguments)
     @debug "set_compiled_mode_request"
 
-    if params.compiledMode
-        state.compile_mode = JuliaInterpreter.Compiled()
-    else
-        state.compile_mode = JuliaInterpreter.finish_and_return!
+    debug_session.compiled_mode = params.compiledMode
+
+    if debug_session.debug_engine!==nothing
+        DebugEngines.set_compiled_mode!(debug_session.debug_engine, debug_session.compiled_mode)
     end
 end
 
-function set_compiled_functions_modules!(items::Vector{String})
-    @debug "set_compiled_functions_modules!"
-
-    unset = String[]
-
-    @debug "setting as compiled" items = items
-
-    # sort inputs once so that removed items are at the end
-    sort!(items, lt = function (a, b)
-        am = startswith(a, '-')
-        bm = startswith(b, '-')
-
-        return am == bm ? isless(a, b) : bm
-    end)
-
-    # user wants these compiled:
-    for acc in items
-        if acc == "ALL_MODULES_EXCEPT_MAIN"
-            for mod in values(Base.loaded_modules)
-                if mod != Main
-                    @debug "setting $mod and submodules as compiled via ALL_MODULES_EXCEPT_MAIN"
-                    push!(JuliaInterpreter.compiled_modules, mod)
-                    toggle_mode_for_all_submodules(mod, true, Set([Main]))
-                end
-            end
-            push!(unset, acc)
-            continue
-        end
-        oacc = acc
-        is_interpreted = startswith(acc, '-') && length(acc) > 1
-        if is_interpreted
-            acc = acc[2:end]
-        end
-        all_submodules = endswith(acc, '.')
-        acc = strip(acc, '.')
-        obj = get_obj_by_accessor(acc)
-
-        if obj === nothing
-            push!(unset, oacc)
-            continue
-        end
-
-        if is_interpreted
-            if obj isa Base.Callable
-                try
-                    for m in methods(Base.unwrap_unionall(obj))
-                        push!(JuliaInterpreter.interpreted_methods, m)
-                    end
-                catch err
-                    @warn "Setting $obj as an interpreted method failed."
-                end
-            elseif obj isa Module
-                delete!(JuliaInterpreter.compiled_modules, obj)
-                if all_submodules
-                    toggle_mode_for_all_submodules(obj, false)
-                end
-                # need to push these into unset because of ALL_MODULES_EXCEPT_MAIN
-                # being re-applied every time
-                push!(unset, oacc)
-            end
-        else
-            if obj isa Base.Callable
-                try
-                    for m in methods(Base.unwrap_unionall(obj))
-                        push!(JuliaInterpreter.compiled_methods, m)
-                    end
-                catch err
-                    @warn "Setting $obj as an interpreted method failed."
-                end
-            elseif obj isa Module
-                push!(JuliaInterpreter.compiled_modules, obj)
-                if all_submodules
-                    toggle_mode_for_all_submodules(obj, true)
-                end
-            end
-        end
-    end
-
-    @debug "remaining items" unset = unset
-    return unset
-end
-
-function set_compiled_functions_modules!(params)
-    if params.compiledModulesOrFunctions isa Vector && length(params.compiledModulesOrFunctions) > 0
-        return set_compiled_functions_modules!(params.compiledModulesOrFunctions)
-    end
-    return []
-end
-
-function toggle_mode_for_all_submodules(mod, compiled, seen = Set())
-    for name in names(mod; all = true)
-        if isdefined(mod, name)
-            obj = getfield(mod, name)
-            if obj !== mod && obj isa Module && !(obj in seen)
-                push!(seen, obj)
-                if compiled
-                    push!(JuliaInterpreter.compiled_modules, obj)
-                else
-                    delete!(JuliaInterpreter.compiled_modules, obj)
-                end
-                toggle_mode_for_all_submodules(obj, compiled, seen)
-            end
-        end
-    end
-end
-
-function get_obj_by_accessor(accessor, super = nothing)
-    parts = split(accessor, '.')
-    @assert length(parts) > 0
-    top = popfirst!(parts)
-    if super === nothing
-        # try getting module from loaded_modules_array first and then from Main:
-        loaded_modules = Base.loaded_modules_array()
-        ind = findfirst(==(top), string.(loaded_modules))
-        if ind !== nothing
-            root = loaded_modules[ind]
-            if length(parts) > 0
-                return get_obj_by_accessor(join(parts, '.'), root)
-            end
-            return root
-        else
-            return get_obj_by_accessor(accessor, Main)
-        end
-    else
-        if isdefined(super, Symbol(top))
-            this = getfield(super, Symbol(top))
-            if length(parts) > 0
-                if this isa Module
-                    return get_obj_by_accessor(join(parts, '.'), this)
-                end
-            else
-                return this
-            end
-        end
-    end
-    return nothing
-end
-
-function set_break_points_request(conn, state::DebugSession, params::SetBreakpointsArguments)
+function set_break_points_request(conn, debug_session::DebugSession, params::SetBreakpointsArguments)
     @debug "setbreakpoints_request"
 
-    file = params.source.path
+    filename = params.source.path
 
     # JuliaInterpreter.remove mutates the vector returned by
     # breakpoints(), so we make a copy to not mess up iteration
     for bp in copy(JuliaInterpreter.breakpoints())
         if bp isa JuliaInterpreter.BreakpointFileLocation
-            if bp.path == file
+            if bp.path == filename
                 @debug "Removing breakpoint at $(bp.path):$(bp.line)"
                 JuliaInterpreter.remove(bp)
             end
@@ -309,8 +174,8 @@ function set_break_points_request(conn, state::DebugSession, params::SetBreakpoi
             nothing
         end
 
-        @debug "Setting breakpoint at $(file):$(bp.line) (condition $(condition))"
-        JuliaInterpreter.breakpoint(file, bp.line, condition)
+        @debug "Setting breakpoint at $(filename):$(bp.line) (condition $(condition))"
+        JuliaInterpreter.breakpoint(filename, bp.line, condition)
     end
 
     SetBreakpointsResponseArguments([Breakpoint(true) for _ in params.breakpoints])
@@ -391,15 +256,11 @@ function set_function_break_points_request(conn, state::DebugSession, params::Se
 
     bps = filter(i -> i !== nothing, bps)
 
-    for bp in JuliaInterpreter.breakpoints()
-        if bp isa JuliaInterpreter.BreakpointSignature
-            JuliaInterpreter.remove(bp)
-        end
+    state.function_breakpoints = bps
+
+    if state.debug_engine!==nothing
+        DebugEngines.set_function_breakpoints!(state.debug_engine, state.function_breakpoints)
     end
-
-    state.not_yet_set_function_breakpoints = Set{Any}(bps)
-
-    attempt_to_set_f_breakpoints!(state.not_yet_set_function_breakpoints)
 
     return SetFunctionBreakpointsResponseArguments([Breakpoint(true) for i = 1:length(bps)])
 end
@@ -415,7 +276,8 @@ function stack_trace_request(conn, state::DebugSession, params::StackTraceArgume
     @debug "getstacktrace_request"
 
     frames = StackFrame[]
-    fr = state.frame
+    # TODO Move all of this into DebugEngine
+    fr = state.debug_engine.frame
 
     if fr === nothing
         @debug fr
@@ -442,7 +304,32 @@ function stack_trace_request(conn, state::DebugSession, params::StackTraceArgume
         sf_hint = sfHint(fr, meth_or_mod_name)
         source_hint, source_origin = missing, missing # could try to de-emphasize certain sources in the future
 
-        if isfile(file_name)
+        if startswith(basename(file_name), "jl_notebook_cell_df34fa98e69747e1a8f8a730347b8e2f_")
+            push!(
+                frames,
+                StackFrame(
+                    id,
+                    meth_or_mod_name,
+                    Source(
+                        file_name,
+                        file_name,
+                        missing,
+                        source_hint,
+                        source_origin,
+                        missing,
+                        missing,
+                        missing
+                    ),
+                    lineno,
+                    0,
+                    missing,
+                    missing,
+                    missing,
+                    missing,
+                    sf_hint
+                )
+            )
+        elseif isfile(file_name)
             push!(
                 frames,
                 StackFrame(
@@ -575,7 +462,7 @@ function scopes_request(conn, state::DebugSession, params::ScopesArguments)
     @debug "getscope_request"
     empty!(state.varrefs)
 
-    curr_fr = JuliaInterpreter.leaf(state.frame)
+    curr_fr = JuliaInterpreter.leaf(state.debug_engine.frame)
 
     i = 1
 
@@ -1020,7 +907,7 @@ end
 function evaluate_request(conn, state::DebugSession, params::EvaluateArguments)
     @debug "evaluate_request"
 
-    curr_fr = state.frame
+    curr_fr = state.debug_engine.frame
     curr_i = 1
 
     while params.frameId > curr_i
@@ -1042,10 +929,10 @@ function evaluate_request(conn, state::DebugSession, params::EvaluateArguments)
     end
 end
 
-    function continue_request(conn, state::DebugSession, params::ContinueArguments)
+function continue_request(conn, state::DebugSession, params::ContinueArguments)
     @debug "continue_request"
 
-    put!(state.next_cmd, (cmd = :continue,))
+    DebugEngines.execution_continue(state.debug_engine)
 
     return ContinueResponseArguments(true)
 end
@@ -1053,7 +940,7 @@ end
 function next_request(conn, state::DebugSession, params::NextArguments)
     @debug "next_request"
 
-    put!(state.next_cmd, (cmd = :next,))
+    DebugEngines.execution_next(state.debug_engine)
 
     return NextResponseArguments()
 end
@@ -1061,7 +948,7 @@ end
 function setp_in_request(conn, state::DebugSession, params::StepInArguments)
     @debug "stepin_request"
 
-    put!(state.next_cmd, (cmd = :stepIn, targetId = params.targetId))
+    DebugEngines.execution_step_in(state.debug_engine, params.targetId)
 
     return StepInResponseArguments()
 end
@@ -1079,7 +966,7 @@ end
 function setp_out_request(conn, state::DebugSession, params::StepOutArguments)
     @debug "stepout_request"
 
-    put!(state.next_cmd, (cmd = :stepOut,))
+    DebugEngines.execution_step_out(state.debug_engine)
 
     return StepOutResponseArguments()
 end
@@ -1087,7 +974,7 @@ end
 function disconnect_request(conn, state::DebugSession, params::DisconnectArguments)
     @debug "disconnect_request"
 
-    put!(state.next_cmd, (cmd = :stop,))
+    put!(state.next_cmd, (cmd = :terminate,))
 
     return DisconnectResponseArguments()
 end
@@ -1095,7 +982,7 @@ end
 function terminate_request(conn, state::DebugSession, params::TerminateArguments)
     @debug "terminate_request"
 
-    put!(state.next_cmd, (cmd = :stop,))
+    DebugEngines.execution_terminate(state.debug_engine)
 
     return TerminateResponseArguments()
 end

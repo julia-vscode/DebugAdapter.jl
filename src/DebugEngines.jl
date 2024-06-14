@@ -355,7 +355,7 @@ function Base.run(debug_engine::DebugEngine)
                     if ret.err === nothing
                         debug_engine.on_stop(StopReasonBreakpoint)
                     else
-                        state.last_exception = ret.err
+                        debug_engine.last_exception = ret.err
                         error_msg = try
                             Base.invokelatest(sprint, Base.showerror, ret.err)
                         catch err

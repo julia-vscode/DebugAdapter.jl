@@ -136,6 +136,7 @@ function Base.run(debug_session::DebugSession, error_handler=nothing)
                 end
             elseif next_cmd.cmd == :debug
                 debug_session.debug_engine = DebugEngines.DebugEngine(
+                    next_cmd.mod,
                     next_cmd.code,
                     next_cmd.filename,
                     debug_session.stop_on_entry,
@@ -184,12 +185,12 @@ function Base.run(debug_session::DebugSession, error_handler=nothing)
     end
 end
 
-function debug_code(debug_session::DebugSession, code::String, filename::String, terminate_on_finish::Bool)
+function debug_code(debug_session::DebugSession, mod::Module, code::String, filename::String, terminate_on_finish::Bool)
     fetch(debug_session.attached)
 
     debug_session.terminate_on_finish = terminate_on_finish
 
-    put!(debug_session.next_cmd, (cmd=:debug, code=code, filename=filename))
+    put!(debug_session.next_cmd, (cmd=:debug, mod=mod, code=code, filename=filename))
 
     take!(debug_session.finished_execution)
 end

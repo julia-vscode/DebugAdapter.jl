@@ -3,6 +3,7 @@ module DebugEngines
 import ..JuliaInterpreter
 
 mutable struct DebugEngine
+    mod::Module
     code::String
     filename::String
     stop_on_entry::Bool
@@ -21,8 +22,9 @@ mutable struct DebugEngine
 
     on_stop::Function
 
-    function DebugEngine(code::String, filename::String, stop_on_entry::Bool, on_stop::Function)
+    function DebugEngine(mod::Module, code::String, filename::String, stop_on_entry::Bool, on_stop::Function)
         return new(
+            mod,
             code,
             filename,
             stop_on_entry,
@@ -286,7 +288,7 @@ function Base.run(debug_engine::DebugEngine)
         # return LaunchResponseArguments()
     end
 
-    debug_engine.expr_splitter = JuliaInterpreter.ExprSplitter(Main, ex) # TODO: line numbers ?
+    debug_engine.expr_splitter = JuliaInterpreter.ExprSplitter(debug_engine.mod, ex) # TODO: line numbers ?
     debug_engine.frame = get_next_top_level_frame(debug_engine)
 
     if debug_engine.frame === nothing

@@ -222,7 +222,14 @@ function get_next_top_level_frame(state)
     return JuliaInterpreter.Frame(mod, ex)
 end
 
-is_toplevel_return(frame) = frame.framecode.scope isa Module && JuliaInterpreter.isexpr(JuliaInterpreter.pc_expr(frame), :return)
+function is_toplevel_return(frame)
+    is_a_return_node = @static if isdefined(Core, :ReturnNode)
+        JuliaInterpreter.pc_expr(frame) isa Core.ReturnNode
+    else
+        false
+    end
+    frame.framecode.scope isa Module && (JuliaInterpreter.isexpr(JuliaInterpreter.pc_expr(frame), :return) || is_a_return_node)
+end
 
 function our_debug_command(debug_engine::DebugEngine, cmd::Symbol)
     while true

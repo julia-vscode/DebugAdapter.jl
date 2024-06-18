@@ -9,7 +9,8 @@ mutable struct DebugEngine
     stop_on_entry::Bool
 
     next_cmd::Channel{Any}
-    frame
+
+    frame::Union{Nothing, Frame}
 
     expr_splitter::Union{JuliaInterpreter.ExprSplitter,Nothing}
 

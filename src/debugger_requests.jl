@@ -1,6 +1,6 @@
 # Request handlers
 
-function initialize_request(conn, debug_session::DebugSession, params::InitializeRequestArguments)
+function initialize_request(debug_session::DebugSession, params::InitializeRequestArguments)
     return Capabilities(
         true, # supportsConfigurationDoneRequest::Union{Missing,Bool}
         true, # supportsFunctionBreakpoints::Union{Missing,Bool}
@@ -40,15 +40,15 @@ function initialize_request(conn, debug_session::DebugSession, params::Initializ
         # response.body.supportsConditionalBreakpoints = true
 end
 
-function configuration_done_request(conn, debug_session::DebugSession, params::Union{Nothing,ConfigurationDoneArguments})
+function configuration_done_request(debug_session::DebugSession, params::Union{Nothing,ConfigurationDoneArguments})
     put!(debug_session.configuration_done, true)
     return ConfigurationDoneResponseArguments()
 end
 
-function launch_request(conn, debug_session::DebugSession, params::LaunchArguments)
+function launch_request(debug_session::DebugSession, params::LaunchArguments)
     # Indicate that we are ready for the initial configuration phase, and then
     # wait for it to finish
-    DAPRPC.send(conn, initialized_notification_type, InitializedEventArguments())
+    DAPRPC.send(debug_session.endpoint, initialized_notification_type, InitializedEventArguments())
     take!(debug_session.configuration_done)
 
     Pkg.activate(params.juliaEnv)
@@ -109,14 +109,12 @@ function launch_request(conn, debug_session::DebugSession, params::LaunchArgumen
     end
 end
 
-
-
-function attach_request(conn, debug_session::DebugSession, params::JuliaAttachArguments)
+function attach_request(debug_session::DebugSession, params::JuliaAttachArguments)
     @debug "attach_request" params = params
 
     # Indicate that we are ready for the initial configuration phase, and then
     # wait for it to finish
-    DAPRPC.send(conn, initialized_notification_type, InitializedEventArguments())
+    DAPRPC.send(debug_session.endpoint, initialized_notification_type, InitializedEventArguments())
     take!(debug_session.configuration_done)
 
     debug_session.stop_on_entry = params.stopOnEntry
@@ -136,7 +134,7 @@ end
 
 
 
-function set_compiled_items_request(conn, debug_session::DebugSession, params::SetCompiledItemsArguments)
+function set_compiled_items_request(debug_session::DebugSession, params::SetCompiledItemsArguments)
     @debug "set_compiled_items_request"
 
     debug_session.compiled_modules_or_functions = params.compiledModulesOrFunctions
@@ -146,7 +144,7 @@ function set_compiled_items_request(conn, debug_session::DebugSession, params::S
     end
 end
 
-function set_compiled_mode_request(conn, debug_session::DebugSession, params::SetCompiledModeArguments)
+function set_compiled_mode_request(debug_session::DebugSession, params::SetCompiledModeArguments)
     @debug "set_compiled_mode_request"
 
     debug_session.compiled_mode = params.compiledMode
@@ -156,7 +154,7 @@ function set_compiled_mode_request(conn, debug_session::DebugSession, params::Se
     end
 end
 
-function set_break_points_request(conn, debug_session::DebugSession, params::SetBreakpointsArguments)
+function set_break_points_request(debug_session::DebugSession, params::SetBreakpointsArguments)
     @debug "setbreakpoints_request"
 
     filename = params.source.path
@@ -187,7 +185,7 @@ function set_break_points_request(conn, debug_session::DebugSession, params::Set
     SetBreakpointsResponseArguments([Breakpoint(true) for _ in params.breakpoints])
 end
 
-function set_exception_break_points_request(conn, debug_session::DebugSession, params::SetExceptionBreakpointsArguments)
+function set_exception_break_points_request(debug_session::DebugSession, params::SetExceptionBreakpointsArguments)
     @debug "setexceptionbreakpoints_request"
 
     opts = Set(params.filters)
@@ -207,7 +205,7 @@ function set_exception_break_points_request(conn, debug_session::DebugSession, p
     return SetExceptionBreakpointsResponseArguments(String[], missing)
 end
 
-function set_function_break_points_request(conn, debug_session::DebugSession, params::SetFunctionBreakpointsArguments)
+function set_function_break_points_request(debug_session::DebugSession, params::SetFunctionBreakpointsArguments)
     @debug "setfunctionbreakpoints_request"
 
     bps = map(params.breakpoints) do i
@@ -278,7 +276,7 @@ function sfHint(frame, meth_or_mod_name)
     return missing
 end
 
-function stack_trace_request(conn, debug_session::DebugSession, params::StackTraceArguments)
+function stack_trace_request(debug_session::DebugSession, params::StackTraceArguments)
     @debug "getstacktrace_request"
 
     frames = StackFrame[]
@@ -464,7 +462,7 @@ function stack_trace_request(conn, debug_session::DebugSession, params::StackTra
     return StackTraceResponseArguments(frames, length(frames))
 end
 
-function scopes_request(conn, debug_session::DebugSession, params::ScopesArguments)
+function scopes_request(debug_session::DebugSession, params::ScopesArguments)
     @debug "getscope_request"
     empty!(debug_session.varrefs)
 
@@ -507,7 +505,7 @@ function scopes_request(conn, debug_session::DebugSession, params::ScopesArgumen
     return ScopesResponseArguments(scopes)
 end
 
-function source_request(conn, debug_session::DebugSession, params::SourceArguments)
+function source_request(debug_session::DebugSession, params::SourceArguments)
     @debug "getsource_request"
 
     source_id = params.source.sourceReference
@@ -623,7 +621,7 @@ function push_module_names!(variables, debug_session, mod)
     end
 end
 
-function variables_request(conn, debug_session::DebugSession, params::VariablesArguments)
+function variables_request(debug_session::DebugSession, params::VariablesArguments)
     @debug "getvariables_request"
 
     var_ref_id = params.variablesReference
@@ -773,7 +771,7 @@ function variables_request(conn, debug_session::DebugSession, params::VariablesA
     return VariablesResponseArguments(variables)
 end
 
-function set_variable_request(conn, debug_session::DebugSession, params::SetVariableArguments)
+function set_variable_request(debug_session::DebugSession, params::SetVariableArguments)
     varref_id = params.variablesReference
     var_name = params.name
     var_value = params.value
@@ -868,7 +866,7 @@ function set_variable_request(conn, debug_session::DebugSession, params::SetVari
     end
 end
 
-function restart_frame_request(conn, debug_session::DebugSession, params::RestartFrameArguments)
+function restart_frame_request(debug_session::DebugSession, params::RestartFrameArguments)
     frame_id = params.frameId
 
     curr_fr = JuliaInterpreter.leaf(debug_session.frame)
@@ -897,7 +895,7 @@ function restart_frame_request(conn, debug_session::DebugSession, params::Restar
     return RestartFrameResponseResponseArguments()
 end
 
-function exception_info_request(conn, debug_session::DebugSession, params::ExceptionInfoArguments)
+function exception_info_request(debug_session::DebugSession, params::ExceptionInfoArguments)
     exception_id = string(typeof(debug_session.debug_engine.last_exception))
     exception_description = Base.invokelatest(sprint, Base.showerror, debug_session.debug_engine.last_exception)
 
@@ -910,7 +908,7 @@ function exception_info_request(conn, debug_session::DebugSession, params::Excep
     return ExceptionInfoResponseArguments(exception_id, exception_description, "userUnhandled", ExceptionDetails(missing, missing, missing, missing, exception_stacktrace, missing))
 end
 
-function evaluate_request(conn, debug_session::DebugSession, params::EvaluateArguments)
+function evaluate_request(debug_session::DebugSession, params::EvaluateArguments)
     @debug "evaluate_request"
 
     curr_fr = debug_session.debug_engine.frame
@@ -935,7 +933,7 @@ function evaluate_request(conn, debug_session::DebugSession, params::EvaluateArg
     end
 end
 
-function continue_request(conn, debug_session::DebugSession, params::ContinueArguments)
+function continue_request(debug_session::DebugSession, params::ContinueArguments)
     @debug "continue_request"
 
     DebugEngines.execution_continue(debug_session.debug_engine)
@@ -943,7 +941,7 @@ function continue_request(conn, debug_session::DebugSession, params::ContinueArg
     return ContinueResponseArguments(true)
 end
 
-function next_request(conn, debug_session::DebugSession, params::NextArguments)
+function next_request(debug_session::DebugSession, params::NextArguments)
     @debug "next_request"
 
     DebugEngines.execution_next(debug_session.debug_engine)
@@ -951,7 +949,7 @@ function next_request(conn, debug_session::DebugSession, params::NextArguments)
     return NextResponseArguments()
 end
 
-function setp_in_request(conn, debug_session::DebugSession, params::StepInArguments)
+function setp_in_request(debug_session::DebugSession, params::StepInArguments)
     @debug "stepin_request"
 
     DebugEngines.execution_step_in(debug_session.debug_engine, params.targetId)
@@ -959,7 +957,7 @@ function setp_in_request(conn, debug_session::DebugSession, params::StepInArgume
     return StepInResponseArguments()
 end
 
-function step_in_targets_request(conn, debug_session::DebugSession, params::StepInTargetsArguments)
+function step_in_targets_request(debug_session::DebugSession, params::StepInTargetsArguments)
     @debug "stepin_targets_request"
 
     targets = calls_on_line(debug_session)
@@ -969,7 +967,7 @@ function step_in_targets_request(conn, debug_session::DebugSession, params::Step
     ])
 end
 
-function setp_out_request(conn, debug_session::DebugSession, params::StepOutArguments)
+function setp_out_request(debug_session::DebugSession, params::StepOutArguments)
     @debug "stepout_request"
 
     DebugEngines.execution_step_out(debug_session.debug_engine)
@@ -977,7 +975,7 @@ function setp_out_request(conn, debug_session::DebugSession, params::StepOutArgu
     return StepOutResponseArguments()
 end
 
-function disconnect_request(conn, debug_session::DebugSession, params::DisconnectArguments)
+function disconnect_request(debug_session::DebugSession, params::DisconnectArguments)
     @debug "disconnect_request"
 
     put!(debug_session.next_cmd, (cmd = :terminate,))
@@ -985,7 +983,7 @@ function disconnect_request(conn, debug_session::DebugSession, params::Disconnec
     return DisconnectResponseArguments()
 end
 
-function terminate_request(conn, debug_session::DebugSession, params::TerminateArguments)
+function terminate_request(debug_session::DebugSession, params::TerminateArguments)
     @debug "terminate_request"
 
     DebugEngines.execution_terminate(debug_session.debug_engine)
@@ -993,10 +991,10 @@ function terminate_request(conn, debug_session::DebugSession, params::TerminateA
     return TerminateResponseArguments()
 end
 
-function threads_request(conn, debug_session::DebugSession, params::Nothing)
+function threads_request(debug_session::DebugSession, params::Nothing)
     return ThreadsResponseArguments([Thread(id = 1, name = "Main Thread")])
 end
 
-function breakpointlocations_request(conn, debug_session::DebugSession, params::BreakpointLocationsArguments)
+function breakpointlocations_request(debug_session::DebugSession, params::BreakpointLocationsArguments)
     return BreakpointLocationsResponseArguments(BreakpointLocation[])
 end

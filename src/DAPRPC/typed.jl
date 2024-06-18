@@ -86,7 +86,7 @@ function dispatch_msg(x::DAPEndpoint, dispatcher::MsgDispatcher, msg)
                 param_type(msg[request_type == :request ? "arguments" : "body"])
             end
 
-            res = handler.func(x, params)
+            res = handler.func(params)
 
             if handler.message_type isa RequestType
                 if res isa DAPError

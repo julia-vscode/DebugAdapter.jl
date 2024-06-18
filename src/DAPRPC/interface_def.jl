@@ -69,7 +69,9 @@ macro dict_readable(arg)
         if !(field isa LineNumberNode)
             fieldname = string(field.args[1])
             fieldtype = field_type(field, string(tname))
-            if fieldtype isa Expr && fieldtype.head == :curly && fieldtype.args[2] != :Any
+            if fieldtype isa Expr && fieldtype.head == :curly && fieldtype.args[1] == :Dict
+                f = :($fieldtype(dict[$fieldname]))
+            elseif fieldtype isa Expr && fieldtype.head == :curly && fieldtype.args[2] != :Any
                 f = :($(fieldtype.args[2]).(dict[$fieldname]))
             elseif fieldtype != :Any
                 f = :($(fieldtype)(dict[$fieldname]))

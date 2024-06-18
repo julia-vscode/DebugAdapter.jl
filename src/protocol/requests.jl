@@ -34,6 +34,7 @@ end
     program::String
     stopOnEntry::Union{Missing,Bool}
     cwd::Union{Missing,String}
+    env::Union{Missing,Dict{String,String}}
     juliaEnv::Union{Missing,String}
     trace::Union{Missing,Bool}
     args::Union{Missing,Vector{String}}

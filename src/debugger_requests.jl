@@ -64,6 +64,12 @@ function launch_request(conn, debug_session::DebugSession, params::LaunchArgumen
         cd(params.cwd)
     end
 
+    if params.env!==missing
+        for i in params.env
+            ENV[i.first] = i.second
+        end
+    end
+
     if params.noDebug === true
         debug_session.terminate_on_finish = true
         filename_to_debug = isabspath(params.program) ? params.program : joinpath(pwd(), params.program)

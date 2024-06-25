@@ -10,7 +10,7 @@ mutable struct DebugEngine
 
     next_cmd::Channel{Any}
 
-    frame::Union{Nothing, Frame}
+    frame::Union{Nothing, JuliaInterpreter.Frame}
 
     expr_splitter::Union{JuliaInterpreter.ExprSplitter,Nothing}
 

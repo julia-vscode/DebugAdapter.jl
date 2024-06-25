@@ -1,5 +1,3 @@
-using Test
-using DebugAdapter
+using TestItemRunner
 
-@testset "DebugAdapter" begin
-end
+@run_package_tests

@@ -1,24 +1,37 @@
-const disconnect_request_type = JSONRPC.RequestType("disconnect", DisconnectArguments, DisconnectResponseArguments)
-const set_break_points_request_type = JSONRPC.RequestType("setBreakpoints", SetBreakpointsArguments, SetBreakpointsResponseArguments)
-const set_exception_break_points_request_type = JSONRPC.RequestType("setExceptionBreakpoints", SetExceptionBreakpointsArguments, SetExceptionBreakpointsResponseArguments)
-const set_function_exception_break_points_request_type = JSONRPC.RequestType("setFunctionBreakpoints", SetFunctionBreakpointsArguments, SetFunctionBreakpointsResponseArguments)
-const stack_trace_request_type = JSONRPC.RequestType("stackTrace", StackTraceArguments, StackTraceResponseArguments)
-const scopes_request_type = JSONRPC.RequestType("scopes", ScopesArguments, ScopesResponseArguments)
-const source_request_type = JSONRPC.RequestType("source", SourceArguments, SourceResponseArguments)
-const variables_request_type = JSONRPC.RequestType("variables", VariablesArguments, VariablesResponseArguments)
-const continue_request_type = JSONRPC.RequestType("continue", ContinueArguments, ContinueResponseArguments)
-const next_request_type = JSONRPC.RequestType("next", NextArguments, NextResponseArguments)
-const step_in_request_type = JSONRPC.RequestType("stepIn", StepInArguments, StepInResponseArguments)
-const step_in_targets_request_type = JSONRPC.RequestType("stepInTargets", StepInTargetsArguments, StepInTargetsResponseArguments)
-const step_out_request_type = JSONRPC.RequestType("stepOut", StepOutArguments, StepOutResponseArguments)
-const evaluate_request_type = JSONRPC.RequestType("evaluate", EvaluateArguments, EvaluateResponseArguments)
-const terminate_request_type = JSONRPC.RequestType("terminate", TerminateArguments, TerminateResponseArguments)
-const exception_info_request_type = JSONRPC.RequestType("exceptionInfo", ExceptionInfoArguments, ExceptionInfoResponseArguments)
-const restart_frame_request_type = JSONRPC.RequestType("restartFrame", RestartFrameArguments, RestartFrameResponseResponseArguments)
-const set_variable_request_type = JSONRPC.RequestType("setVariable", SetVariableArguments, SetVariableResponseArguments)
-const stopped_notification_type = JSONRPC.NotificationType("stopped", StoppedEventArguments)
-const threads_request_type = JSONRPC.RequestType("threads", Nothing, ThreadsResponseArguments)
-const breakpointslocation_request_type = JSONRPC.RequestType("breakpointLocations", BreakpointLocationsArguments, BreakpointLocationsResponseArguments)
+@dict_readable struct JuliaAttachArguments <: Outbound
+    __restart::Union{Missing,Any}
+    stopOnEntry::Bool
+    compiledModulesOrFunctions::Union{Missing,Vector{String}}
+    compiledMode::Union{Missing,Bool}
+end
+
+const disconnect_request_type = DAPRPC.RequestType("disconnect", DisconnectArguments, DisconnectResponseArguments)
+const set_break_points_request_type = DAPRPC.RequestType("setBreakpoints", SetBreakpointsArguments, SetBreakpointsResponseArguments)
+const set_exception_break_points_request_type = DAPRPC.RequestType("setExceptionBreakpoints", SetExceptionBreakpointsArguments, SetExceptionBreakpointsResponseArguments)
+const set_function_exception_break_points_request_type = DAPRPC.RequestType("setFunctionBreakpoints", SetFunctionBreakpointsArguments, SetFunctionBreakpointsResponseArguments)
+const stack_trace_request_type = DAPRPC.RequestType("stackTrace", StackTraceArguments, StackTraceResponseArguments)
+const scopes_request_type = DAPRPC.RequestType("scopes", ScopesArguments, ScopesResponseArguments)
+const source_request_type = DAPRPC.RequestType("source", SourceArguments, SourceResponseArguments)
+const variables_request_type = DAPRPC.RequestType("variables", VariablesArguments, VariablesResponseArguments)
+const continue_request_type = DAPRPC.RequestType("continue", ContinueArguments, ContinueResponseArguments)
+const next_request_type = DAPRPC.RequestType("next", NextArguments, NextResponseArguments)
+const step_in_request_type = DAPRPC.RequestType("stepIn", StepInArguments, StepInResponseArguments)
+const step_in_targets_request_type = DAPRPC.RequestType("stepInTargets", StepInTargetsArguments, StepInTargetsResponseArguments)
+const step_out_request_type = DAPRPC.RequestType("stepOut", StepOutArguments, StepOutResponseArguments)
+const evaluate_request_type = DAPRPC.RequestType("evaluate", EvaluateArguments, EvaluateResponseArguments)
+const terminate_request_type = DAPRPC.RequestType("terminate", TerminateArguments, TerminateResponseArguments)
+const exception_info_request_type = DAPRPC.RequestType("exceptionInfo", ExceptionInfoArguments, ExceptionInfoResponseArguments)
+const restart_frame_request_type = DAPRPC.RequestType("restartFrame", RestartFrameArguments, RestartFrameResponseResponseArguments)
+const set_variable_request_type = DAPRPC.RequestType("setVariable", SetVariableArguments, SetVariableResponseArguments)
+const stopped_notification_type = DAPRPC.EventType("stopped", StoppedEventArguments)
+const threads_request_type = DAPRPC.RequestType("threads", Nothing, ThreadsResponseArguments)
+const breakpointslocation_request_type = DAPRPC.RequestType("breakpointLocations", BreakpointLocationsArguments, BreakpointLocationsResponseArguments)
+const initialize_request_type = DAPRPC.RequestType("initialize", InitializeRequestArguments, Capabilities)
+const launch_request_type = DAPRPC.RequestType("launch", LaunchArguments, LaunchResponseArguments)
+const attach_request_type = DAPRPC.RequestType("attach", JuliaAttachArguments, AttachResponseArguments)
+const initialized_notification_type = DAPRPC.EventType("initialized", InitializedEventArguments)
+const configuration_done_request_type = DAPRPC.RequestType("configurationDone", Union{ConfigurationDoneArguments,Nothing}, ConfigurationDoneResponseArguments)
+const terminated_notification_type = DAPRPC.EventType("terminated", TerminatedEventArguments)
 
 @dict_readable struct DebugArguments <: Outbound
     stopOnEntry::Bool
@@ -27,18 +40,8 @@ const breakpointslocation_request_type = JSONRPC.RequestType("breakpointLocation
     compiledMode::Union{Missing,Bool}
 end
 
-@dict_readable struct ExecArguments <: Outbound
-    stopOnEntry::Bool
-    code::String
-    file::String
-    compiledModulesOrFunctions::Union{Missing,Vector{String}}
-    compiledMode::Union{Missing,Bool}
-end
+
 
 # Our own requests
-const run_notification_type = JSONRPC.NotificationType("run", NamedTuple{(:program,),Tuple{String}})
-const debug_notification_type = JSONRPC.NotificationType("debug", DebugArguments)
-const exec_notification_type = JSONRPC.NotificationType("exec", ExecArguments)
-const finished_notification_type = JSONRPC.NotificationType("finished", Nothing)
-const set_compiled_items_notification_type = JSONRPC.NotificationType("setCompiledItems", NamedTuple{(:compiledModulesOrFunctions,),Tuple{Vector{String}}})
-const set_compiled_mode_notification_type = JSONRPC.NotificationType("setCompiledMode", NamedTuple{(:compiledMode,),Tuple{Bool}})
+const set_compiled_items_notification_type = DAPRPC.EventType("setCompiledItems", SetCompiledItemsArguments)
+const set_compiled_mode_notification_type = DAPRPC.EventType("setCompiledMode", SetCompiledModeArguments)

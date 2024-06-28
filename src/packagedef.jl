@@ -3,150 +3,183 @@
 
 import Sockets, Base64
 
+module DAPRPC
+    using ..JSON
+
+    include("DAPRPC/packagedef.jl")
+end
+import .DAPRPC: @dict_readable, Outbound
+
+include("DebugEngines.jl")
 include("protocol/debug_adapter_protocol.jl")
 include("debugger_utils.jl")
-include("debugger_core.jl")
-include("debugger_requests.jl")
 
 
-function clean_up_ARGS_in_launch_mode()
-    pipename = ARGS[1]
-    crashreporting_pipename = ARGS[2]
-    deleteat!(ARGS, 1)
-    deleteat!(ARGS, 1)
-
-    if ENV["JL_ARGS"] != ""
-        cmd_ln_args_encoded = split(ENV["JL_ARGS"], ';')
-
-        delete!(ENV, "JL_ARGS")
-
-        cmd_ln_args_decoded = map(i -> String(Base64.base64decode(i)), cmd_ln_args_encoded)
-
-        for arg in cmd_ln_args_decoded
-            push!(ARGS, arg)
-        end
-    end
-
-    return pipename, crashreporting_pipename
+struct VariableReference
+    kind::Symbol
+    value
 end
 
-function startdebug(socket, error_handler=nothing)
+mutable struct DebugSession
+    conn
+    endpoint::Union{Nothing,DAPRPC.DAPEndpoint}
+    debug_engine::Union{Nothing,DebugEngines.DebugEngine}
+
+    terminate_on_finish::Bool
+
+    sources::Dict{Int,String}
+    next_source_id::Int
+    varrefs::Vector{VariableReference}
+
+    configuration_done::Channel{Bool}
+    attached::Channel{Bool}
+    finished_execution::Channel{Bool}
+
+    next_cmd::Channel
+
+    function_breakpoints
+    compiled_modules_or_functions::Vector{String}
+    compiled_mode::Bool
+    stop_on_entry::Bool
+
+    function DebugSession(conn)
+        return new(
+            conn,
+            nothing,
+            nothing,
+            true,
+            Dict{Int,String}(),
+            1,
+            VariableReference[],
+            Channel{Bool}(1),
+            Channel{Bool}(1),
+            Channel{Bool}(1),
+            Channel{Any}(Inf),
+            [],
+            String[],
+            false,
+            false
+        )
+    end
+end
+
+function Base.run(debug_session::DebugSession, error_handler=nothing)
     @debug "Connected to debug adapter."
 
     try
+        endpoint = DAPRPC.DAPEndpoint(debug_session.conn, debug_session.conn, error_handler)
+        debug_session.endpoint = endpoint
+        run(endpoint)
 
-        endpoint = JSONRPC.JSONRPCEndpoint(socket, socket, error_handler)
+        msg_dispatcher = DAPRPC.MsgDispatcher()
+        msg_dispatcher[disconnect_request_type] = params -> disconnect_request(debug_session, params)
+        msg_dispatcher[attach_request_type] = params -> attach_request(debug_session, params)
+        msg_dispatcher[set_break_points_request_type] = params -> set_break_points_request(debug_session, params)
+        msg_dispatcher[set_exception_break_points_request_type] = params -> set_exception_break_points_request(debug_session, params)
+        msg_dispatcher[set_function_exception_break_points_request_type] = params -> set_function_break_points_request(debug_session, params)
+        msg_dispatcher[stack_trace_request_type] = params -> stack_trace_request(debug_session, params)
+        msg_dispatcher[scopes_request_type] = params -> scopes_request(debug_session, params)
+        msg_dispatcher[source_request_type] = params -> source_request(debug_session, params)
+        msg_dispatcher[variables_request_type] = params -> variables_request(debug_session, params)
+        msg_dispatcher[continue_request_type] = params -> continue_request(debug_session, params)
+        msg_dispatcher[next_request_type] = params -> next_request(debug_session, params)
+        msg_dispatcher[step_in_request_type] = params -> setp_in_request(debug_session, params)
+        msg_dispatcher[step_in_targets_request_type] = params -> step_in_targets_request(debug_session, params)
+        msg_dispatcher[step_out_request_type] = params -> setp_out_request(debug_session, params)
+        msg_dispatcher[evaluate_request_type] = params -> evaluate_request(debug_session, params)
+        msg_dispatcher[terminate_request_type] = params -> terminate_request(debug_session, params)
+        msg_dispatcher[exception_info_request_type] = params -> exception_info_request(debug_session, params)
+        msg_dispatcher[restart_frame_request_type] = params -> restart_frame_request(debug_session, params)
+        msg_dispatcher[set_variable_request_type] = params -> set_variable_request(debug_session, params)
+        msg_dispatcher[threads_request_type] = params -> threads_request(debug_session, params)
+        msg_dispatcher[breakpointslocation_request_type] = params -> breakpointlocations_request(debug_session, params)
+        msg_dispatcher[set_compiled_items_notification_type] = params -> set_compiled_items_request(debug_session, params)
+        msg_dispatcher[set_compiled_mode_notification_type] = params -> set_compiled_mode_request(debug_session, params)
+        msg_dispatcher[initialize_request_type] = params -> initialize_request(debug_session, params)
+        msg_dispatcher[launch_request_type] = params -> launch_request(debug_session, params)
+        msg_dispatcher[configuration_done_request_type] = params -> configuration_done_request(debug_session, params)
 
-        try
-
-            run(endpoint)
-
-            state = DebuggerState()
-
-            msg_dispatcher = JSONRPC.MsgDispatcher()
-            msg_dispatcher[disconnect_request_type] = (conn, params) -> disconnect_request(conn, state, params)
-            msg_dispatcher[run_notification_type] = (conn, params) -> run_notification(conn, state, params)
-            msg_dispatcher[debug_notification_type] = (conn, params) -> debug_notification(conn, state, params)
-
-            msg_dispatcher[exec_notification_type] = (conn, params) -> exec_notification(conn, state, params)
-            msg_dispatcher[set_break_points_request_type] = (conn, params) -> set_break_points_request(conn, state, params)
-            msg_dispatcher[set_exception_break_points_request_type] = (conn, params) -> set_exception_break_points_request(conn, state, params)
-            msg_dispatcher[set_function_exception_break_points_request_type] = (conn, params) -> set_function_break_points_request(conn, state, params)
-            msg_dispatcher[stack_trace_request_type] = (conn, params) -> stack_trace_request(conn, state, params)
-            msg_dispatcher[scopes_request_type] = (conn, params) -> scopes_request(conn, state, params)
-            msg_dispatcher[source_request_type] = (conn, params) -> source_request(conn, state, params)
-            msg_dispatcher[variables_request_type] = (conn, params) -> variables_request(conn, state, params)
-            msg_dispatcher[continue_request_type] = (conn, params) -> continue_request(conn, state, params)
-            msg_dispatcher[next_request_type] = (conn, params) -> next_request(conn, state, params)
-            msg_dispatcher[step_in_request_type] = (conn, params) -> setp_in_request(conn, state, params)
-            msg_dispatcher[step_in_targets_request_type] = (conn, params) -> step_in_targets_request(conn, state, params)
-            msg_dispatcher[step_out_request_type] = (conn, params) -> setp_out_request(conn, state, params)
-            msg_dispatcher[evaluate_request_type] = (conn, params) -> evaluate_request(conn, state, params)
-            msg_dispatcher[terminate_request_type] = (conn, params) -> terminate_request(conn, state, params)
-            msg_dispatcher[exception_info_request_type] = (conn, params) -> exception_info_request(conn, state, params)
-            msg_dispatcher[restart_frame_request_type] = (conn, params) -> restart_frame_request(conn, state, params)
-            msg_dispatcher[set_variable_request_type] = (conn, params) -> set_variable_request(conn, state, params)
-            msg_dispatcher[threads_request_type] = (conn, params) -> threads_request(conn, state, params)
-            msg_dispatcher[breakpointslocation_request_type] = (conn, params) -> breakpointlocations_request(conn, state, params)
-            msg_dispatcher[set_compiled_items_notification_type] = (conn, params) -> set_compiled_items_request(conn, state, params)
-            msg_dispatcher[set_compiled_mode_notification_type] = (conn, params) -> set_compiled_mode_request(conn, state, params)
-
-            @async try
-                for msg in endpoint
-                    JSONRPC.dispatch_msg(endpoint, msg_dispatcher, msg)
-                end
-            catch err
-                if error_handler === nothing
-                    Base.display_error(err, catch_backtrace())
-                else
-                    error_handler(err, Base.catch_backtrace())
-                end
-            end
-
-            while true
-                msg = take!(state.next_cmd)
-
-                ret = nothing
-
-                if msg.cmd == :run
-                    try
-                        Main.include(msg.program)
-                    catch err
-                        Base.display_error(stderr, err, catch_backtrace())
-                    end
-
-                    JSONRPC.send(endpoint, finished_notification_type, nothing)
-                    break
-                elseif msg.cmd == :stop
-                    break
-                elseif msg.cmd == :set_source_path
-                    task_local_storage()[:SOURCE_PATH] = msg.source_path
-                else
-                    if msg.cmd == :continue
-                        ret = our_debug_command(:c, state)
-                    elseif msg.cmd == :next
-                        ret = our_debug_command(:n, state)
-                    elseif msg.cmd == :stepIn
-                        if msg.targetId === missing
-                            ret = our_debug_command(:s, state)
-                        else
-                            itr = 0
-                            success = true
-                            while state.frame.pc < msg.targetId
-                                ret = our_debug_command(:nc, state)
-                                if ret isa JuliaInterpreter.BreakpointRef
-                                    success = false
-                                    break
-                                end
-                                itr += 1
-                                if itr > 100
-                                    success = false
-                                    @warn "Could not step into specified target."
-                                    break
-                                end
-                            end
-
-                            if success
-                                ret = our_debug_command(:s, state)
-                            end
-                        end
-                    elseif msg.cmd == :stepOut
-                        ret = our_debug_command(:finish, state)
-                    end
-
-                    if ret === nothing
-                        JSONRPC.send(endpoint, finished_notification_type, nothing)
-                        state.debug_mode == :launch && break
+        @async try
+            for msg in endpoint
+                @async try
+                    DAPRPC.dispatch_msg(endpoint, msg_dispatcher, msg)
+                catch err
+                    if error_handler === nothing
+                        Base.display_error(err, catch_backtrace())
                     else
-                        send_stopped_msg(endpoint, ret, state)
+                        error_handler(err, Base.catch_backtrace())
                     end
                 end
             end
-
-            @debug "Finished debugging"
-        finally
-            close(socket)
+        catch err
+            if error_handler === nothing
+                Base.display_error(err, catch_backtrace())
+            else
+                error_handler(err, Base.catch_backtrace())
+            end
         end
+
+        while true
+            next_cmd = take!(debug_session.next_cmd)
+
+            if next_cmd.cmd == :terminate
+                break
+            elseif next_cmd.cmd == :run
+                try
+                    Main.include(next_cmd.program)
+                catch err
+                    Base.display_error(stderr, err, catch_backtrace())
+                end
+
+                if debug_session.terminate_on_finish
+                    break
+                end
+            elseif next_cmd.cmd == :debug
+                if startswith(next_cmd.filename, "REPL[1]")
+                    debug_session.sources[0] = next_cmd.code
+                end
+
+                debug_session.debug_engine = DebugEngines.DebugEngine(
+                    next_cmd.mod,
+                    next_cmd.code,
+                    next_cmd.filename,
+                    debug_session.stop_on_entry,
+                    (reason, message::Union{String,Nothing}=nothing) -> begin
+                        if reason==DebugEngines.StopReasonBreakpoint
+                            DAPRPC.send(endpoint, stopped_notification_type, StoppedEventArguments("breakpoint", missing, 1, missing, missing, missing))
+                        elseif reason==DebugEngines.StopReasonException
+                            DAPRPC.send(endpoint, stopped_notification_type, StoppedEventArguments("exception", missing, 1, missing, message, missing))
+                        elseif reason==DebugEngines.StopReasonStep
+                            DAPRPC.send(endpoint, stopped_notification_type, StoppedEventArguments("step", missing, 1, missing, missing, missing))
+                        elseif reason==DebugEngines.StopReasonEntry
+                            DAPRPC.send(endpoint, stopped_notification_type, StoppedEventArguments("entry", missing, 1, missing, missing, missing))
+                        else
+                            error()
+                        end
+                    end
+                )
+
+                DebugEngines.set_function_breakpoints!(debug_session.debug_engine, debug_session.function_breakpoints)
+                DebugEngines.set_compiled_functions_modules!(debug_session.debug_engine, debug_session.compiled_modules_or_functions)
+                DebugEngines.set_compiled_mode!(debug_session.debug_engine, debug_session.compiled_mode)
+
+                run(debug_session.debug_engine)
+
+                debug_session.debug_engine = nothing
+
+                put!(debug_session.finished_execution, true)
+
+                if debug_session.terminate_on_finish
+                    break
+                end
+            else
+                error("Unknown command")
+            end
+        end
+
+        DAPRPC.send(endpoint, terminated_notification_type, TerminatedEventArguments(false))
+
+        @debug "Finished debugging"
     catch err
         if error_handler === nothing
             rethrow(err)
@@ -155,3 +188,25 @@ function startdebug(socket, error_handler=nothing)
         end
     end
 end
+
+function debug_code(debug_session::DebugSession, mod::Module, code::String, filename::String, terminate_on_finish::Bool)
+    fetch(debug_session.attached)
+
+    debug_session.terminate_on_finish = terminate_on_finish
+
+    put!(debug_session.next_cmd, (cmd=:debug, mod=mod, code=code, filename=filename))
+
+    take!(debug_session.finished_execution)
+end
+
+function terminate(debug_session::DebugSession)
+    if debug_session.debug_engine!==nothing
+        DebugEngines.execution_terminate(debug_session.debug_engine)
+    end
+end
+
+function Base.close(debug_session::DebugSession)
+    put!(debug_session.next_cmd, (;cmd=:terminate))
+end
+
+include("debugger_requests.jl")

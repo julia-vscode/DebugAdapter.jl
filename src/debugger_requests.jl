@@ -51,7 +51,7 @@ function launch_request(debug_session::DebugSession, params::LaunchArguments)
     DAPRPC.send(debug_session.endpoint, initialized_notification_type, InitializedEventArguments())
     take!(debug_session.configuration_done)
 
-    Pkg.activate(params.juliaEnv)
+    params.juliaEnv!==missing && Pkg.activate(params.juliaEnv)
 
     empty!(ARGS)
     if params.args!==missing

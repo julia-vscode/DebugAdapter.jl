@@ -101,7 +101,7 @@ function launch_request(debug_session::DebugSession, params::JuliaLaunchArgument
             debug_session.compiled_mode = params.compiledMode
         end
 
-        debug_session.stop_on_entry = params.stopOnEntry
+        params.stopOnEntry!==missing && (debug_session.stop_on_entry = params.stopOnEntry)
 
         put!(debug_session.next_cmd, (cmd=:debug, mod=Main, code=file_content, filename=filename_to_debug))
 
@@ -117,7 +117,7 @@ function attach_request(debug_session::DebugSession, params::JuliaAttachArgument
     DAPRPC.send(debug_session.endpoint, initialized_notification_type, InitializedEventArguments())
     take!(debug_session.configuration_done)
 
-    debug_session.stop_on_entry = params.stopOnEntry
+    params.stopOnEntry!==missing && (debug_session.stop_on_entry = params.stopOnEntry)
 
     if params.compiledModulesOrFunctions !== missing
         debug_session.compiled_modules_or_functions = params.compiledModulesOrFunctions

@@ -1,3 +1,16 @@
+@dict_readable struct JuliaLaunchArguments <: Outbound
+    noDebug::Union{Missing,Bool}
+    __restart::Union{Missing,Any}
+    program::String
+    stopOnEntry::Union{Missing,Bool}
+    cwd::Union{Missing,String}
+    env::Union{Missing,Dict{String,String}}
+    project::Union{Missing,String}
+    args::Union{Missing,Vector{String}}
+    compiledModulesOrFunctions::Union{Missing,Vector{String}}
+    compiledMode::Union{Missing,Bool}
+end
+
 @dict_readable struct JuliaAttachArguments <: Outbound
     __restart::Union{Missing,Any}
     stopOnEntry::Bool
@@ -27,7 +40,7 @@ const stopped_notification_type = DAPRPC.EventType("stopped", StoppedEventArgume
 const threads_request_type = DAPRPC.RequestType("threads", Nothing, ThreadsResponseArguments)
 const breakpointslocation_request_type = DAPRPC.RequestType("breakpointLocations", BreakpointLocationsArguments, BreakpointLocationsResponseArguments)
 const initialize_request_type = DAPRPC.RequestType("initialize", InitializeRequestArguments, Capabilities)
-const launch_request_type = DAPRPC.RequestType("launch", LaunchArguments, LaunchResponseArguments)
+const launch_request_type = DAPRPC.RequestType("launch", JuliaLaunchArguments, LaunchResponseArguments)
 const attach_request_type = DAPRPC.RequestType("attach", JuliaAttachArguments, AttachResponseArguments)
 const initialized_notification_type = DAPRPC.EventType("initialized", InitializedEventArguments)
 const configuration_done_request_type = DAPRPC.RequestType("configurationDone", Union{ConfigurationDoneArguments,Nothing}, ConfigurationDoneResponseArguments)

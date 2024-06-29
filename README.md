@@ -21,7 +21,7 @@ The call to `run` will return once the debug session has finished.
 
 ## Julia specific launch and attach arguments
 
-The Julia specific launch arguments can be seen in the type `LaunchArguments` in this repo. The most important one is `program`, which needs to be an absolute path to a Julia file.
+The Julia specific launch arguments can be seen in the type `JuliaLaunchArguments` in this repo. The most important one is `program`, which needs to be an absolute path to a Julia file.
 
 The Julia specific attach arguments can be seen in the type `JuliaAttachArguments` in this repo. Note that even when the debugger is attached, no code will automatically be debugged. Instead, one needs to run the code that should be debugged via a call to `DebugAdapter.debug_code` like this:
 

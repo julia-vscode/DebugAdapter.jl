@@ -28,20 +28,6 @@ end
 @dict_readable struct ConfigurationDoneArguments <: Outbound
 end
 
-@dict_readable struct LaunchArguments <: Outbound
-    noDebug::Union{Missing,Bool}
-    __restart::Union{Missing,Any}
-    program::String
-    stopOnEntry::Union{Missing,Bool}
-    cwd::Union{Missing,String}
-    env::Union{Missing,Dict{String,String}}
-    juliaEnv::Union{Missing,String}
-    trace::Union{Missing,Bool}
-    args::Union{Missing,Vector{String}}
-    compiledModulesOrFunctions::Union{Missing,Vector{String}}
-    compiledMode::Union{Missing,Bool}
-end
-
 @dict_readable struct RestartArguments <: Outbound
 end
 

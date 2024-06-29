@@ -45,13 +45,13 @@ function configuration_done_request(debug_session::DebugSession, params::Union{N
     return ConfigurationDoneResponseArguments()
 end
 
-function launch_request(debug_session::DebugSession, params::LaunchArguments)
+function launch_request(debug_session::DebugSession, params::JuliaLaunchArguments)
     # Indicate that we are ready for the initial configuration phase, and then
     # wait for it to finish
     DAPRPC.send(debug_session.endpoint, initialized_notification_type, InitializedEventArguments())
     take!(debug_session.configuration_done)
 
-    params.juliaEnv!==missing && Pkg.activate(params.juliaEnv)
+    params.project!==missing && Pkg.activate(params.project)
 
     empty!(ARGS)
     if params.args!==missing

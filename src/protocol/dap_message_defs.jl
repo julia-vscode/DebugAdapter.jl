@@ -6,7 +6,6 @@
     cwd::Union{Missing,String}
     env::Union{Missing,Dict{String,String}}
     project::Union{Missing,String}
-    trace::Union{Missing,Bool}
     args::Union{Missing,Vector{String}}
     compiledModulesOrFunctions::Union{Missing,Vector{String}}
     compiledMode::Union{Missing,Bool}

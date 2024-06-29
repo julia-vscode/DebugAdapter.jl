@@ -29,7 +29,7 @@ end
 # so that we get an error in the typecast at the end of `send`
 # if that is not the case.
 typed_res(res, TR::Type{Nothing}) = res
-typed_res(res, TR::Type{<:T}) where {T <: AbstractArray{Any}} = T(res)
+typed_res(res, TR::Type{<:T}) where {T<:AbstractArray{Any}} = T(res)
 typed_res(res, TR::Type{<:AbstractArray{T}}) where T = T.(res)
 typed_res(res, TR::Type) = TR(res)
 
@@ -58,7 +58,7 @@ end
 function dispatch_msg(x::DAPEndpoint, dispatcher::MsgDispatcher, msg)
     dispatcher._currentlyHandlingMsg = true
     try
-        method_name, request_type = if msg["type"]  == "request"
+        method_name, request_type = if msg["type"] == "request"
             msg["command"], :request
         elseif msg["type"] == "event"
             msg["event"], :event
@@ -81,7 +81,7 @@ function dispatch_msg(x::DAPEndpoint, dispatcher::MsgDispatcher, msg)
                     param_type(msg[request_type == :request ? "arguments" : "body"])
                 end
             elseif param_type <: NamedTuple
-                convert(param_type,(;(Symbol(i[1])=>i[2] for i in msg[request_type == :request ? "arguments" : "body"])...))
+                convert(param_type, (; (Symbol(i[1]) => i[2] for i in msg[request_type == :request ? "arguments" : "body"])...))
             else
                 param_type(msg[request_type == :request ? "arguments" : "body"])
             end

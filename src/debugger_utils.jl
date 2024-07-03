@@ -13,7 +13,7 @@ basepath(file) = normpath(joinpath((@static isdir(SRC_DIR) ? SRC_DIR : RELEASE_D
 maybe_quote(x) = (isa(x, Expr) || isa(x, Symbol)) ? QuoteNode(x) : x
 
 # all calls in the current frame and the same "line"
-calls_on_line(state, args...) = calls_on_line(state.frame, args...)
+calls_on_line(state, args...) = calls_on_line(state.debug_engine.frame, args...)
 calls_on_line(::Nothing, args...) = []
 function calls_on_line(frame::JuliaInterpreter.Frame, line=nothing)
     if line === nothing
@@ -81,7 +81,7 @@ function prettyprint_expr(io, expr, src)
 end
 
 # all calls in the current frame after (and including) the current pc
-calls_in_frame(state) = calls_in_frame(state.frame)
+calls_in_frame(state) = calls_in_frame(state.debug_engine.frame)
 calls_in_frame(::Nothing) = []
 function calls_in_frame(frame::JuliaInterpreter.Frame)
     exprs = []

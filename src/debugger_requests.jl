@@ -869,7 +869,7 @@ end
 function restart_frame_request(debug_session::DebugSession, params::RestartFrameArguments)
     frame_id = params.frameId
 
-    curr_fr = JuliaInterpreter.leaf(debug_session.frame)
+    curr_fr = JuliaInterpreter.leaf(debug_session.debug_engine.frame)
 
         i = 1
 
@@ -881,13 +881,13 @@ function restart_frame_request(debug_session::DebugSession, params::RestartFrame
     if curr_fr.caller === nothing
         # We are in the top level
 
-        debug_session.frame = get_next_top_level_frame(debug_session)
+        debug_session.debug_engine.frame = get_next_top_level_frame(debug_session)
     else
         curr_fr.pc = 1
         curr_fr.assignment_counter = 1
         curr_fr.callee = nothing
 
-        debug_session.frame = curr_fr
+        debug_session.debug_engine.frame = curr_fr
     end
 
     put!(debug_session.next_cmd, (cmd = :continue,))

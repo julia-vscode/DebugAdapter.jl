@@ -10,7 +10,7 @@ To run a debug session, first instantiate `DebugAdapter.DebugSession` by passing
 import DebugAdapter
 
 # Create or acquire a connection
-conn = ...
+conn = ... # This should be a Base.IO subtype, for example a named pipe or socket connection
 
 session = DebugAdapter.DebugSession(conn)
 

@@ -27,8 +27,7 @@ mutable struct DebugSession
 
     terminate_on_finish::Bool
 
-    sources::Dict{Int,String}
-    next_source_id::Int
+
     varrefs::Vector{VariableReference}
 
     configuration_done::Channel{Bool}
@@ -48,8 +47,6 @@ mutable struct DebugSession
             nothing,
             nothing,
             true,
-            Dict{Int,String}(),
-            1,
             VariableReference[],
             Channel{Bool}(1),
             Channel{Bool}(1),
@@ -135,10 +132,6 @@ function Base.run(debug_session::DebugSession, error_handler=nothing)
                     break
                 end
             elseif next_cmd.cmd == :debug
-                if startswith(next_cmd.filename, "REPL[1]")
-                    debug_session.sources[0] = next_cmd.code
-                end
-
                 debug_session.debug_engine = DebugEngines.DebugEngine(
                     next_cmd.mod,
                     next_cmd.code,
@@ -158,6 +151,10 @@ function Base.run(debug_session::DebugSession, error_handler=nothing)
                         end
                     end
                 )
+
+                if occursin(r"REPL\[\d*\]", next_cmd.filename)
+                    DebugEngines.set_source(debug_session.debug_engine, next_cmd.filename, next_cmd.code)
+                end
 
                 DebugEngines.set_function_breakpoints!(debug_session.debug_engine, debug_session.function_breakpoints)
                 DebugEngines.set_compiled_functions_modules!(debug_session.debug_engine, debug_session.compiled_modules_or_functions)

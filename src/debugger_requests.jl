@@ -301,7 +301,7 @@ function stack_trace_request(debug_session::DebugSession, params::StackTraceArgu
         meth_or_mod_name = string(Base.nameof(curr_fr))
 
         # Is this a file from base?
-        if !isabspath(file_name)
+        if !isabspath(file_name) && !occursin(r"REPL\[\d*\]", file_name)
             file_name = basepath(file_name)
         end
 
@@ -361,7 +361,11 @@ function stack_trace_request(debug_session::DebugSession, params::StackTraceArgu
         elseif curr_scopeof isa Method
             ret = JuliaInterpreter.CodeTracking.definition(String, curr_fr.framecode.scope)
             if ret !== nothing
-                debug_session.sources[debug_session.next_source_id], loc = ret
+                source_name = string(curr_fr.framecode.scope)
+
+                DebugEngines.set_source(debug_session.debug_engine, source_name, ret[1])
+                source_id = DebugEngines.get_source_id(debug_session.debug_engine, source_name)
+
                 push!(
                     frames,
                     StackFrame(
@@ -370,7 +374,7 @@ function stack_trace_request(debug_session::DebugSession, params::StackTraceArgu
                         Source(
                             file_name,
                             missing,
-                            debug_session.next_source_id,
+                            source_id,
                             source_hint,
                             source_origin,
                             missing,
@@ -386,7 +390,6 @@ function stack_trace_request(debug_session::DebugSession, params::StackTraceArgu
                         sf_hint
                     )
                 )
-                debug_session.next_source_id += 1
             else
                 src = curr_fr.framecode.src
                 @static if isdefined(JuliaInterpreter, :copy_codeinfo)
@@ -397,7 +400,10 @@ function stack_trace_request(debug_session::DebugSession, params::StackTraceArgu
                 JuliaInterpreter.replace_coretypes!(src; rev = true)
                 code = Base.invokelatest(JuliaInterpreter.framecode_lines, src)
 
-                debug_session.sources[debug_session.next_source_id] = join(code, '\n')
+                source_name = string(uuid4())
+
+                DebugEngines.set_source(debug_session.debug_engine, source_name, join(code, '\n'))
+                source_id = DebugEngines.get_source_id(debug_session.debug_engine, source_name)
 
                 push!(
                     frames,
@@ -407,7 +413,7 @@ function stack_trace_request(debug_session::DebugSession, params::StackTraceArgu
                         Source(
                             file_name,
                             missing,
-                            debug_session.next_source_id,
+                            source_id,
                             source_hint,
                             source_origin,
                             missing,
@@ -423,21 +429,20 @@ function stack_trace_request(debug_session::DebugSession, params::StackTraceArgu
                         sf_hint
                     )
                 )
-                debug_session.next_source_id += 1
             end
-        else
-            # For now we are assuming that this can only happen
-            # for code that is passed via the @enter or @run macros,
-            # and that code we have stored as source with id 0
+        elseif occursin(r"REPL\[\d*\]", file_name)
+            source_name = file_name
+            source_id = DebugEngines.get_source_id(debug_session.debug_engine, file_name)
+
             push!(
                     frames,
                     StackFrame(
                         id,
                         meth_or_mod_name,
                         Source(
-                            "REPL",
+                            file_name,
                             missing,
-                            0,
+                            source_id,
                             missing,
                             missing,
                             missing,
@@ -453,6 +458,8 @@ function stack_trace_request(debug_session::DebugSession, params::StackTraceArgu
                         missing
                     )
                 )
+        else
+            error("Unknown stack type")
         end
 
         id += 1
@@ -510,7 +517,9 @@ function source_request(debug_session::DebugSession, params::SourceArguments)
 
     source_id = params.source.sourceReference
 
-    return SourceResponseArguments(debug_session.sources[source_id], missing)
+    code = DebugEngines.get_source(debug_session.debug_engine, source_id)
+
+    return SourceResponseArguments(code, missing)
 end
 
 function construct_return_msg_for_var(debug_session::DebugSession, name, value)

@@ -23,6 +23,9 @@ mutable struct DebugEngine
 
     on_stop::Function
 
+    sources::Vector{String}
+    source_id_by_name::Dict{String,Int}
+
     function DebugEngine(mod::Module, code::String, filename::String, stop_on_entry::Bool, on_stop::Function)
         return new(
             mod,
@@ -38,7 +41,9 @@ mutable struct DebugEngine
             String[],
             Set{Any}(),
             nothing,
-            on_stop
+            on_stop,
+            String[],
+            Dict{String,Int}()
         )
     end
 end
@@ -423,6 +428,33 @@ end
 
 function execution_terminate(debug_engine::DebugEngine)
     put!(debug_engine.next_cmd, (cmd = :stop,))
+end
+
+function has_source(debug_engine::DebugEngine, filename::AbstractString)
+    return haskey(debug_engine.source_id_by_name, filename)
+end
+
+function set_source(debug_engine::DebugEngine, filename::AbstractString, code::AbstractString)
+    if !haskey(debug_engine.source_id_by_name, filename)
+        source_id = length(debug_engine.sources) + 1
+        push!(debug_engine.sources, code)
+        debug_engine.source_id_by_name[filename] = source_id
+    else
+        source_id = debug_engine.source_id_by_name[filename]
+        debug_engine.sources[source_id] = code
+    end
+end
+
+function get_source_id(debug_engine::DebugEngine, filename::AbstractString)
+    return debug_engine.source_id_by_name[filename]
+end
+
+function get_source(debug_engine::DebugEngine, filename::AbstractString)
+    return debug_engine.sources[debug_engine.source_id_by_name[filename]]
+end
+
+function get_source(debug_engine::DebugEngine, source_id::Int)
+    return debug_engine.sources[source_id]
 end
 
 end

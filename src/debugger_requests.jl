@@ -987,6 +987,8 @@ end
 function disconnect_request(debug_session::DebugSession, params::DisconnectArguments)
     @debug "disconnect_request"
 
+    DebugEngines.terminate(debug_session.debug_engine)
+
     put!(debug_session.next_cmd, (cmd = :terminate,))
 
     return DisconnectResponseArguments()

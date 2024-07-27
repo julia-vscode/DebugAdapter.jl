@@ -10,7 +10,7 @@ mutable struct DebugEngine
 
     next_cmd::Channel{Any}
 
-    frame::Union{Nothing, JuliaInterpreter.Frame}
+    frame::Union{Nothing,JuliaInterpreter.Frame}
 
     expr_splitter::Union{JuliaInterpreter.ExprSplitter,Nothing}
 
@@ -31,13 +31,9 @@ mutable struct DebugEngine
             mod,
             code,
             filename,
-            stop_on_entry,
-
-            Channel{Any}(Inf),
+            stop_on_entry, Channel{Any}(Inf),
             nothing,
-            nothing,
-
-            JuliaInterpreter.finish_and_return!,
+            nothing, JuliaInterpreter.finish_and_return!,
             String[],
             Set{Any}(),
             nothing,
@@ -48,7 +44,7 @@ mutable struct DebugEngine
     end
 end
 
-function get_obj_by_accessor(accessor, super = nothing)
+function get_obj_by_accessor(accessor, super=nothing)
     parts = split(accessor, '.')
     @assert length(parts) > 0
     top = popfirst!(parts)
@@ -80,8 +76,8 @@ function get_obj_by_accessor(accessor, super = nothing)
     return nothing
 end
 
-function toggle_mode_for_all_submodules(mod, compiled, seen = Set())
-    for name in names(mod; all = true)
+function toggle_mode_for_all_submodules(mod, compiled, seen=Set())
+    for name in names(mod; all=true)
         if isdefined(mod, name)
             obj = getfield(mod, name)
             if obj !== mod && obj isa Module && !(obj in seen)
@@ -117,7 +113,7 @@ function set_compiled_functions_modules!(debug_engine::DebugEngine, items::Vecto
     @debug "setting as compiled" items = items
 
     # sort inputs once so that removed items are at the end
-    sort!(items, lt = function (a, b)
+    sort!(items, lt=function (a, b)
         am = startswith(a, '-')
         bm = startswith(b, '-')
 
@@ -313,7 +309,7 @@ function Base.run(debug_engine::DebugEngine)
     elseif JuliaInterpreter.shouldbreak(debug_engine.frame, debug_engine.frame.pc)
         debug_engine.on_stop(StopReasonBreakpoint)
     else
-        put!(debug_engine.next_cmd, (cmd = :continue,))
+        put!(debug_engine.next_cmd, (cmd=:continue,))
     end
 
 
@@ -387,7 +383,7 @@ function Base.run(debug_engine::DebugEngine)
 end
 
 function terminate(debug_engine::DebugEngine)
-    put!(debug_engine.next_cmd, (cmd = :stop,))
+    put!(debug_engine.next_cmd, (cmd=:stop,))
 end
 
 function set_function_breakpoints!(debug_engine::DebugEngine, breakpoints)
@@ -411,23 +407,23 @@ function set_compiled_mode!(debug_engine::DebugEngine, compiled_mode::Bool)
 end
 
 function execution_continue(debug_engine::DebugEngine)
-    put!(debug_engine.next_cmd, (cmd = :continue,))
+    put!(debug_engine.next_cmd, (cmd=:continue,))
 end
 
 function execution_next(debug_engine::DebugEngine)
-    put!(debug_engine.next_cmd, (cmd = :next,))
+    put!(debug_engine.next_cmd, (cmd=:next,))
 end
 
 function execution_step_in(debug_engine::DebugEngine, target_id)
-    put!(debug_engine.next_cmd, (cmd = :stepIn, targetId = target_id))
+    put!(debug_engine.next_cmd, (cmd=:stepIn, targetId=target_id))
 end
 
 function execution_step_out(debug_engine::DebugEngine)
-    put!(debug_engine.next_cmd, (cmd = :stepOut,))
+    put!(debug_engine.next_cmd, (cmd=:stepOut,))
 end
 
 function execution_terminate(debug_engine::DebugEngine)
-    put!(debug_engine.next_cmd, (cmd = :stop,))
+    put!(debug_engine.next_cmd, (cmd=:stop,))
 end
 
 function has_source(debug_engine::DebugEngine, filename::AbstractString)

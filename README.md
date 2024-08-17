@@ -31,8 +31,6 @@ code = """
 println("Hello world")
 """ # This is the code that should be run
 filepath = joinpath(homedir(), "something.jl") # This is the filepath that should be used for the debugger
-terminate_on_finish = false # Whether the debug session should terminate when the code has finished running
 
- DebugAdapter.debug_code(session, mod, code, filepath, terminate_on_finish)
+ DebugAdapter.debug_code(session, mod, code, filepath)
  ```
- 

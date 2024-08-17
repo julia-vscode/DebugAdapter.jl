@@ -25,9 +25,6 @@ mutable struct DebugSession
     endpoint::Union{Nothing,DAPRPC.DAPEndpoint}
     debug_engine::Union{Nothing,DebugEngines.DebugEngine}
 
-    terminate_on_finish::Bool
-
-
     varrefs::Vector{VariableReference}
 
     configuration_done::Channel{Bool}
@@ -46,7 +43,6 @@ mutable struct DebugSession
             conn,
             nothing,
             nothing,
-            true,
             VariableReference[],
             Channel{Bool}(1),
             Channel{Bool}(1),
@@ -128,9 +124,10 @@ function Base.run(debug_session::DebugSession, error_handler=nothing)
                     Base.display_error(stderr, err, catch_backtrace())
                 end
 
-                if debug_session.terminate_on_finish
-                    break
-                end
+                DAPRPC.send(endpoint, terminated_notification_type, TerminatedEventArguments(false))
+
+                # TODO Also send exit code via exited notification
+                # DAPRPC.send(endpoint, terminated_notification_type, TerminatedEventArguments(false))
             elseif next_cmd.cmd == :debug
                 debug_session.debug_engine = DebugEngines.DebugEngine(
                     next_cmd.mod,
@@ -164,17 +161,13 @@ function Base.run(debug_session::DebugSession, error_handler=nothing)
 
                 debug_session.debug_engine = nothing
 
-                put!(debug_session.finished_execution, true)
+                DAPRPC.send(endpoint, terminated_notification_type, TerminatedEventArguments(false))
 
-                if debug_session.terminate_on_finish
-                    break
-                end
+                put!(debug_session.finished_execution, true)
             else
                 error("Unknown command")
             end
         end
-
-        DAPRPC.send(endpoint, terminated_notification_type, TerminatedEventArguments(false))
 
         @debug "Finished debugging"
     catch err
@@ -186,10 +179,8 @@ function Base.run(debug_session::DebugSession, error_handler=nothing)
     end
 end
 
-function debug_code(debug_session::DebugSession, mod::Module, code::String, filename::String, terminate_on_finish::Bool)
+function debug_code(debug_session::DebugSession, mod::Module, code::String, filename::String)
     fetch(debug_session.attached)
-
-    debug_session.terminate_on_finish = terminate_on_finish
 
     put!(debug_session.next_cmd, (cmd=:debug, mod=mod, code=code, filename=filename))
 

@@ -71,15 +71,12 @@ function launch_request(debug_session::DebugSession, params::JuliaLaunchArgument
     end
 
     if params.noDebug === true
-        debug_session.terminate_on_finish = true
         filename_to_debug = isabspath(params.program) ? params.program : joinpath(pwd(), params.program)
         put!(debug_session.next_cmd, (cmd = :run, program = filename_to_debug))
 
         return LaunchResponseArguments()
     else
         @debug "debug_request" params = params
-
-        debug_session.terminate_on_finish = true
 
         filename_to_debug = isabspath(params.program) ? params.program : joinpath(pwd(), params.program)
 
@@ -987,7 +984,9 @@ end
 function disconnect_request(debug_session::DebugSession, params::DisconnectArguments)
     @debug "disconnect_request"
 
-    DebugEngines.terminate(debug_session.debug_engine)
+    if debug_session.debug_engine!==nothing
+        DebugEngines.terminate(debug_session.debug_engine)
+    end
 
     put!(debug_session.next_cmd, (cmd = :terminate,))
 

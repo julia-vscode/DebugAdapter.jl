@@ -166,9 +166,9 @@ function send_request(x::DAPEndpoint, method::AbstractString, params)
 
     response = take!(response_channel)
 
-    if response["success"]=="true"
+    if response["success"]==true
         return response["body"]
-    elseif response["success"]=="false"
+    elseif response["success"]==false
         error_message = response["message"]
         throw(DAPError(error_message))
     else
@@ -203,7 +203,7 @@ function send_success_response(endpoint, original_request, result)
 
     endpoint.seq += 1
 
-    response = Dict("seq" => endpoint.seq, "type" => "response", "request_seq" => original_request["seq"], "success" => "true", "command" => original_request["command"], "body" => result)
+    response = Dict("seq" => endpoint.seq, "type" => "response", "request_seq" => original_request["seq"], "success" => true, "command" => original_request["command"], "body" => result)
 
     response_json = JSON.json(response)
 

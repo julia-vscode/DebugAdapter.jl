@@ -1,7 +1,7 @@
 
 # include("../../VSCodeServer/src/repl.jl")
 
-import Sockets, Base64
+import Sockets, Base64, UUIDs
 
 module DAPRPC
     using ..JSON

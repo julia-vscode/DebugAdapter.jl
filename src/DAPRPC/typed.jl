@@ -65,6 +65,10 @@ function dispatch_msg(x::DAPEndpoint, dispatcher::MsgDispatcher, msg)
         else
             error()
         end
+        arg_key = request_type == :request ? "arguments" : "body"
+        arg = if haskey(msg, arg_key)
+            msg[arg_key]
+        end
         handler = get(dispatcher._handlers, method_name, nothing)
         if handler !== nothing
             param_type = get_param_type(handler.message_type)
@@ -72,18 +76,16 @@ function dispatch_msg(x::DAPEndpoint, dispatcher::MsgDispatcher, msg)
                 nothing
             elseif param_type isa Union
                 if param_type.a === Nothing || param_type.b === Nothing
-                    if !haskey(msg, request_type == :request ? "arguments" : "body")
-                        nothing
-                    else
-                        param_type(msg[request_type == :request ? "arguments" : "body"])
+                    if !isnothing(arg)
+                        param_type(arg)
                     end
                 else
-                    param_type(msg[request_type == :request ? "arguments" : "body"])
+                    param_type(arg)
                 end
             elseif param_type <: NamedTuple
-                convert(param_type,(;(Symbol(i[1])=>i[2] for i in msg[request_type == :request ? "arguments" : "body"])...))
+                convert(param_type,(;(Symbol(i[1])=>i[2] for i in arg)...))
             else
-                param_type(msg[request_type == :request ? "arguments" : "body"])
+                param_type(arg)
             end
 
             res = handler.func(params)

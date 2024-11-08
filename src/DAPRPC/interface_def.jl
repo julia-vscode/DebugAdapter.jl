@@ -60,6 +60,10 @@ macro dict_readable(arg)
         end
         ) : nothing)
 
+        function $tname(_::Nothing)
+            $tname(Dict())
+        end
+
         function $tname(dict::Dict)
         end
     end
@@ -69,17 +73,29 @@ macro dict_readable(arg)
         if !(field isa LineNumberNode)
             fieldname = string(field.args[1])
             fieldtype = field_type(field, string(tname))
+            val = :(dict[$fieldname])
+
             if fieldtype isa Expr && fieldtype.head == :curly && fieldtype.args[1] == :Dict
-                f = :($fieldtype(dict[$fieldname]))
+                f = :($fieldtype($val))
             elseif fieldtype isa Expr && fieldtype.head == :curly && fieldtype.args[2] != :Any
-                f = :($(fieldtype.args[2]).(dict[$fieldname]))
+                f = :($(fieldtype.args[2]).($val))
             elseif fieldtype != :Any
-                f = :($(fieldtype)(dict[$fieldname]))
+                f = :($(fieldtype)($val))
             else
-                f = :(dict[$fieldname])
+                f = val
             end
+
             if field_allows_missing(field)
-                f = :(haskey(dict, $fieldname) ? $f : missing)
+                f = :(if haskey(dict, $fieldname)
+                          # We can still get a null value here, so we need to check for that.
+                          if !isnothing($val)
+                              $f
+                          else
+                              missing
+                          end
+                      else
+                          missing
+                      end)
             end
             push!(fex.args, f)
         end

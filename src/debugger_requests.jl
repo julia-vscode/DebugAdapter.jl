@@ -397,7 +397,7 @@ function stack_trace_request(debug_session::DebugSession, params::StackTraceArgu
                 JuliaInterpreter.replace_coretypes!(src; rev = true)
                 code = Base.invokelatest(JuliaInterpreter.framecode_lines, src)
 
-                source_name = string(uuid4())
+                source_name = string(UUIDs.uuid4())
 
                 DebugEngines.set_source(debug_session.debug_engine, source_name, join(code, '\n'))
                 source_id = DebugEngines.get_source_id(debug_session.debug_engine, source_name)

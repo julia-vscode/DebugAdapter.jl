@@ -4,9 +4,9 @@
 import Sockets, Base64, UUIDs
 
 module DAPRPC
-    using ..JSON
+using ..JSON
 
-    include("DAPRPC/packagedef.jl")
+include("DAPRPC/packagedef.jl")
 end
 import .DAPRPC: @dict_readable, Outbound
 
@@ -135,13 +135,13 @@ function Base.run(debug_session::DebugSession, error_handler=nothing)
                     next_cmd.filename,
                     debug_session.stop_on_entry,
                     (reason, message::Union{String,Nothing}=nothing) -> begin
-                        if reason==DebugEngines.StopReasonBreakpoint
+                        if reason == DebugEngines.StopReasonBreakpoint
                             DAPRPC.send(endpoint, stopped_notification_type, StoppedEventArguments("breakpoint", missing, 1, missing, missing, missing))
-                        elseif reason==DebugEngines.StopReasonException
+                        elseif reason == DebugEngines.StopReasonException
                             DAPRPC.send(endpoint, stopped_notification_type, StoppedEventArguments("exception", missing, 1, missing, message, missing))
-                        elseif reason==DebugEngines.StopReasonStep
+                        elseif reason == DebugEngines.StopReasonStep
                             DAPRPC.send(endpoint, stopped_notification_type, StoppedEventArguments("step", missing, 1, missing, missing, missing))
-                        elseif reason==DebugEngines.StopReasonEntry
+                        elseif reason == DebugEngines.StopReasonEntry
                             DAPRPC.send(endpoint, stopped_notification_type, StoppedEventArguments("entry", missing, 1, missing, missing, missing))
                         else
                             error()
@@ -188,14 +188,14 @@ function debug_code(debug_session::DebugSession, mod::Module, code::String, file
 end
 
 function terminate(debug_session::DebugSession)
-    if debug_session.debug_engine!==nothing
+    if debug_session.debug_engine !== nothing
         DebugEngines.execution_terminate(debug_session.debug_engine)
     end
-    put!(debug_session.next_cmd, (;cmd=:terminate))
+    put!(debug_session.next_cmd, (; cmd=:terminate))
 end
 
 function Base.close(debug_session::DebugSession)
-    put!(debug_session.next_cmd, (;cmd=:terminate))
+    put!(debug_session.next_cmd, (; cmd=:terminate))
 end
 
 include("debugger_requests.jl")

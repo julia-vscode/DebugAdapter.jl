@@ -1,37 +1,7 @@
 # Request handlers
 
 function initialize_request(debug_session::DebugSession, params::InitializeRequestArguments)
-    return Capabilities(
-        true, # supportsConfigurationDoneRequest::Union{Missing,Bool}
-        true, # supportsFunctionBreakpoints::Union{Missing,Bool}
-        true, #supportsConditionalBreakpoints::Union{Missing,Bool}
-        false, # supportsHitConditionalBreakpoints::Union{Missing,Bool}
-        true, # supportsEvaluateForHovers::Union{Missing,Bool}
-        ExceptionBreakpointsFilter[ExceptionBreakpointsFilter("error", "Uncaught Exceptions", true), ExceptionBreakpointsFilter("throw", "All Exceptions", false)], # exceptionBreakpointFilters::Vector{ExceptionBreakpointsFilter}
-        false, # supportsStepBack::Union{Missing,Bool}
-        true, # supportsSetVariable::Union{Missing,Bool}
-        true, # supportsRestartFrame::Union{Missing,Bool}
-        missing, # supportsGotoTargetsRequest::Union{Missing,Bool}
-        true, # supportsStepInTargetsRequest::Union{Missing,Bool}
-        false, # supportsCompletionsRequest::Union{Missing,Bool}
-        missing, # supportsModulesRequest::Union{Missing,Bool}
-        ColumnDescriptor[], #additionalModuleColumns::Vector{ColumnDescriptor}
-        ChecksumAlgorithm[], # supportedChecksumAlgorithms::Vector{ChecksumAlgorithm}
-        missing, # supportsRestartRequest::Union{Missing,Bool}
-        missing, # supportsExceptionOptions::Union{Missing,Bool}
-        missing, #supportsValueFormattingOptions::Union{Missing,Bool}
-        true, # supportsExceptionInfoRequest::Union{Missing,Bool}
-        missing, # supportTerminateDebuggee::Union{Missing,Bool}
-        missing, # supportsDelayedStackTraceLoading::Union{Missing,Bool}
-        missing, # supportsLoadedSourcesRequest::Union{Missing,Bool}
-        false, # supportsLogPoints::Union{Missing,Bool}
-        missing, # supportsTerminateThreadsRequest::Union{Missing,Bool}
-        missing, #supportsSetExpression::Union{Missing,Bool}
-        true, # supportsTerminateRequest::Union{Missing,Bool}
-        false, # supportsDataBreakpoints::Union{Missing,Bool}
-        missing, # supportsReadMemoryRequest::Union{Missing,Bool}
-        missing # supportsDisassembleRequest::Union{Missing,Bool}
-    )
+    debug_session.capabilities
 
         # response.body.supportsCancelRequest = false
 

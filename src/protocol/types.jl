@@ -14,7 +14,7 @@ end
     width::Union{Missing,Int}
 end
 
-@dict_readable struct Capabilities <: Outbound
+@dict_readable mutable struct Capabilities <: Outbound
     supportsConfigurationDoneRequest::Union{Missing,Bool}
     supportsFunctionBreakpoints::Union{Missing,Bool}
     supportsConditionalBreakpoints::Union{Missing,Bool}

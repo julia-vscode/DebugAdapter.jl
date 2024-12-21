@@ -2,7 +2,7 @@
     import DebugAdapter.DebugEngines
 
     module TestValue
-        x = "Code didn't run"
+    x = "Code didn't run"
     end
 
     de = DebugEngines.DebugEngine(

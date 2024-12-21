@@ -2,7 +2,7 @@ struct DAPError <: Exception
     msg::AbstractString
 end
 
-mutable struct DAPEndpoint{IOIn <: IO,IOOut <: IO}
+mutable struct DAPEndpoint{IOIn<:IO,IOOut<:IO}
     pipe_in::IOIn
     pipe_out::IOOut
 
@@ -21,7 +21,7 @@ mutable struct DAPEndpoint{IOIn <: IO,IOOut <: IO}
     seq::Int
 end
 
-DAPEndpoint(pipe_in, pipe_out, err_handler = nothing) =
+DAPEndpoint(pipe_in, pipe_out, err_handler=nothing) =
     DAPEndpoint(pipe_in, pipe_out, Channel{Any}(Inf), Channel{Any}(Inf), Dict{String,Channel{Any}}(), err_handler, :idle, nothing, nothing, 0)
 
 function write_transport_layer(stream, response)
@@ -166,9 +166,9 @@ function send_request(x::DAPEndpoint, method::AbstractString, params)
 
     response = take!(response_channel)
 
-    if response["success"]==true
+    if response["success"] == true
         return response["body"]
-    elseif response["success"]==false
+    elseif response["success"] == false
         error_message = response["message"]
         throw(DAPError(error_message))
     else
@@ -184,7 +184,7 @@ function get_next_message(endpoint::DAPEndpoint)
     return msg
 end
 
-function Base.iterate(endpoint::DAPEndpoint, state = nothing)
+function Base.iterate(endpoint::DAPEndpoint, state=nothing)
     check_dead_endpoint!(endpoint)
 
     try

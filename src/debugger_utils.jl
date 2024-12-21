@@ -40,9 +40,9 @@ function calls_on_line(frame::JuliaInterpreter.Frame, line=nothing)
             for arg in expr.args
                 push!(new_expr.args, maybe_quote(arg))
             end
-            push!(exprs, (pc = pc, expr = string("%", pc, " = ", prettyprint_expr(new_expr, src))))
+            push!(exprs, (pc=pc, expr=string("%", pc, " = ", prettyprint_expr(new_expr, src))))
         elseif Meta.isexpr(expr, :(=))
-            push!(exprs, (pc = pc, expr = prettyprint_expr(expr.args[2], src)))
+            push!(exprs, (pc=pc, expr=prettyprint_expr(expr.args[2], src)))
         end
     end
 
@@ -88,10 +88,10 @@ function calls_in_frame(frame::JuliaInterpreter.Frame)
     for pc in frame.pc:length(frame.framecode.src.codelocs)
         expr = JuliaInterpreter.pc_expr(frame, pc)
         if Meta.isexpr(expr, :call)
-            push!(exprs, (pc = pc, expr = expr))
+            push!(exprs, (pc=pc, expr=expr))
         elseif Meta.isexpr(expr, :(=))
             expr = expr.args[2]
-            push!(exprs, (pc = pc, expr = expr))
+            push!(exprs, (pc=pc, expr=expr))
         end
     end
     exprs
@@ -115,7 +115,7 @@ function remove_ansi_control_chars(str::String)
     replace(str, r"(\x9B|\x1B\[)[0-?]*[ -\/]*[@-~]" => "")
 end
 
-function sprintlimited(args...; func = show, limit::Int = 1000, ellipsis::AbstractString = "…", color = false)
+function sprintlimited(args...; func=show, limit::Int=1000, ellipsis::AbstractString="…", color=false)
     io = IOBuffer()
     ioctx = IOContext(LimitIO(io, limit - length(ellipsis)), :limit => true, :color => color, :displaysize => (30, 64))
 

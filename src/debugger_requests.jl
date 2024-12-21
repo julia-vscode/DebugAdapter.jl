@@ -33,11 +33,11 @@ function initialize_request(debug_session::DebugSession, params::InitializeReque
         missing # supportsDisassembleRequest::Union{Missing,Bool}
     )
 
-        # response.body.supportsCancelRequest = false
+    # response.body.supportsCancelRequest = false
 
-        # response.body.supportsBreakpointLocationsRequest = false
+    # response.body.supportsBreakpointLocationsRequest = false
 
-        # response.body.supportsConditionalBreakpoints = true
+    # response.body.supportsConditionalBreakpoints = true
 end
 
 function configuration_done_request(debug_session::DebugSession, params::Union{Nothing,ConfigurationDoneArguments})
@@ -51,20 +51,20 @@ function launch_request(debug_session::DebugSession, params::JuliaLaunchArgument
     DAPRPC.send(debug_session.endpoint, initialized_notification_type, InitializedEventArguments())
     take!(debug_session.configuration_done)
 
-    params.project!==missing && Pkg.activate(params.project)
+    params.project !== missing && Pkg.activate(params.project)
 
     empty!(ARGS)
-    if params.args!==missing
+    if params.args !== missing
         for arg in params.args
             push!(ARGS, arg)
         end
     end
 
-    if params.cwd!==missing
+    if params.cwd !== missing
         cd(params.cwd)
     end
 
-    if params.env!==missing
+    if params.env !== missing
         for i in params.env
             ENV[i.first] = i.second
         end
@@ -72,7 +72,7 @@ function launch_request(debug_session::DebugSession, params::JuliaLaunchArgument
 
     if params.noDebug === true
         filename_to_debug = isabspath(params.program) ? params.program : joinpath(pwd(), params.program)
-        put!(debug_session.next_cmd, (cmd = :run, program = filename_to_debug))
+        put!(debug_session.next_cmd, (cmd=:run, program=filename_to_debug))
 
         return LaunchResponseArguments()
     else
@@ -98,7 +98,7 @@ function launch_request(debug_session::DebugSession, params::JuliaLaunchArgument
             debug_session.compiled_mode = params.compiledMode
         end
 
-        params.stopOnEntry!==missing && (debug_session.stop_on_entry = params.stopOnEntry)
+        params.stopOnEntry !== missing && (debug_session.stop_on_entry = params.stopOnEntry)
 
         put!(debug_session.next_cmd, (cmd=:debug, mod=Main, code=file_content, filename=filename_to_debug))
 
@@ -114,7 +114,7 @@ function attach_request(debug_session::DebugSession, params::JuliaAttachArgument
     DAPRPC.send(debug_session.endpoint, initialized_notification_type, InitializedEventArguments())
     take!(debug_session.configuration_done)
 
-    params.stopOnEntry!==missing && (debug_session.stop_on_entry = params.stopOnEntry)
+    params.stopOnEntry !== missing && (debug_session.stop_on_entry = params.stopOnEntry)
 
     if params.compiledModulesOrFunctions !== missing
         debug_session.compiled_modules_or_functions = params.compiledModulesOrFunctions
@@ -136,7 +136,7 @@ function set_compiled_items_request(debug_session::DebugSession, params::SetComp
 
     debug_session.compiled_modules_or_functions = params.compiledModulesOrFunctions
 
-    if debug_session.debug_engine!==nothing
+    if debug_session.debug_engine !== nothing
         DebugEngines.set_compiled_functions_modules!(debug_session.debug_engine, debug_session.compiled_modules_or_functions)
     end
 end
@@ -146,7 +146,7 @@ function set_compiled_mode_request(debug_session::DebugSession, params::SetCompi
 
     debug_session.compiled_mode = params.compiledMode
 
-    if debug_session.debug_engine!==nothing
+    if debug_session.debug_engine !== nothing
         DebugEngines.set_compiled_mode!(debug_session.debug_engine, debug_session.compiled_mode)
     end
 end
@@ -220,7 +220,7 @@ function set_function_break_points_request(debug_session::DebugSession, params::
             parsed_name = Meta.parse(decoded_name)
 
             if parsed_name isa Symbol
-                return (mod = Main, name = parsed_name, signature = nothing, condition = parsed_condition)
+                return (mod=Main, name=parsed_name, signature=nothing, condition=parsed_condition)
             elseif parsed_name isa Expr
                 if parsed_name.head == :.
                     # TODO Support this case
@@ -235,16 +235,16 @@ function set_function_break_points_request(debug_session::DebugSession, params::
                         end
                         if all_args_are_legit
 
-                            return (mod = Main, name = parsed_name.args[1], signature = map(j -> j.args[1], parsed_name.args[2:end]), condition = parsed_condition)
+                            return (mod=Main, name=parsed_name.args[1], signature=map(j -> j.args[1], parsed_name.args[2:end]), condition=parsed_condition)
                         else
-                            return (mod = Main, name = parsed_name.args[1], signature = nothing, condition = parsed_condition)
+                            return (mod=Main, name=parsed_name.args[1], signature=nothing, condition=parsed_condition)
                         end
                     else
-                        return (mod = Main, name = parsed_name.args[1], signature = nothing, condition = parsed_condition)
+                        return (mod=Main, name=parsed_name.args[1], signature=nothing, condition=parsed_condition)
                     end
                 else
                     return nothing
-        end
+                end
             else
                 return nothing
             end
@@ -259,7 +259,7 @@ function set_function_break_points_request(debug_session::DebugSession, params::
 
     debug_session.function_breakpoints = bps
 
-    if debug_session.debug_engine!==nothing
+    if debug_session.debug_engine !== nothing
         DebugEngines.set_function_breakpoints!(debug_session.debug_engine, debug_session.function_breakpoints)
     end
 
@@ -394,7 +394,7 @@ function stack_trace_request(debug_session::DebugSession, params::StackTraceArgu
                 else
                     src = copy(src)
                 end
-                JuliaInterpreter.replace_coretypes!(src; rev = true)
+                JuliaInterpreter.replace_coretypes!(src; rev=true)
                 code = Base.invokelatest(JuliaInterpreter.framecode_lines, src)
 
                 source_name = string(UUIDs.uuid4())
@@ -432,29 +432,29 @@ function stack_trace_request(debug_session::DebugSession, params::StackTraceArgu
             source_id = DebugEngines.get_source_id(debug_session.debug_engine, file_name)
 
             push!(
-                    frames,
-                    StackFrame(
-                        id,
-                        meth_or_mod_name,
-                        Source(
-                            file_name,
-                            missing,
-                            source_id,
-                            missing,
-                            missing,
-                            missing,
-                            missing,
-                            missing
-                        ),
-                        lineno,
-                        0,
+                frames,
+                StackFrame(
+                    id,
+                    meth_or_mod_name,
+                    Source(
+                        file_name,
+                        missing,
+                        source_id,
                         missing,
                         missing,
                         missing,
                         missing,
                         missing
-                    )
+                    ),
+                    lineno,
+                    0,
+                    missing,
+                    missing,
+                    missing,
+                    missing,
+                    missing
                 )
+            )
         else
             error("Unknown stack type")
         end
@@ -494,17 +494,17 @@ function scopes_request(debug_session::DebugSession, params::ScopesArguments)
     scopes = []
 
     if isfile(file_name) && code_range !== nothing
-        push!(scopes, Scope(name = "Local", variablesReference = local_var_ref_id, expensive = false, source = Source(name = basename(file_name), path = file_name), line = code_range.start, endLine = code_range.stop))
-        push!(scopes, Scope(name = "Global", variablesReference = global_var_ref_id, expensive = false, source = Source(name = basename(file_name), path = file_name), line = code_range.start, endLine = code_range.stop))
+        push!(scopes, Scope(name="Local", variablesReference=local_var_ref_id, expensive=false, source=Source(name=basename(file_name), path=file_name), line=code_range.start, endLine=code_range.stop))
+        push!(scopes, Scope(name="Global", variablesReference=global_var_ref_id, expensive=false, source=Source(name=basename(file_name), path=file_name), line=code_range.start, endLine=code_range.stop))
     else
-        push!(scopes, Scope(name = "Local", variablesReference = local_var_ref_id, expensive = false))
-        push!(scopes, Scope(name = "Global", variablesReference = global_var_ref_id, expensive = false))
+        push!(scopes, Scope(name="Local", variablesReference=local_var_ref_id, expensive=false))
+        push!(scopes, Scope(name="Global", variablesReference=global_var_ref_id, expensive=false))
     end
 
     curr_mod = JuliaInterpreter.moduleof(curr_fr)
     push!(debug_session.varrefs, VariableReference(:module, curr_mod))
 
-    push!(scopes, Scope(name = "Global ($(curr_mod))", variablesReference = length(debug_session.varrefs), expensive = true))
+    push!(scopes, Scope(name="Global ($(curr_mod))", variablesReference=length(debug_session.varrefs), expensive=true))
 
     return ScopesResponseArguments(scopes)
 end
@@ -524,7 +524,7 @@ function construct_return_msg_for_var(debug_session::DebugSession, name, value)
     v_value_as_string = try
         Base.invokelatest(sprintlimited, value)
     catch err
-        @debug "error showing value" exception=(err, catch_backtrace())
+        @debug "error showing value" exception = (err, catch_backtrace())
         "Error while showing this value."
     end
 
@@ -536,7 +536,7 @@ function construct_return_msg_for_var(debug_session::DebugSession, name, value)
             0
         elseif value isa AbstractArray || value isa AbstractDict
             fieldcount(v_type) > 0 ? 1 : 0
-            else
+        else
             fieldcount(v_type)
         end
 
@@ -550,22 +550,22 @@ function construct_return_msg_for_var(debug_session::DebugSession, name, value)
         end
 
         return Variable(
-            name = name,
-            value = v_value_as_string,
-            type = string(v_type),
-            variablesReference = new_var_id,
-            namedVariables = named_count,
-            indexedVariables = indexed_count
+            name=name,
+            value=v_value_as_string,
+            type=string(v_type),
+            variablesReference=new_var_id,
+            namedVariables=named_count,
+            indexedVariables=indexed_count
         )
     else
-        return Variable(name = name, value = v_value_as_string, type = string(v_type), variablesReference = 0)
+        return Variable(name=name, value=v_value_as_string, type=string(v_type), variablesReference=0)
     end
 end
 
 function construct_return_msg_for_var_with_undef_value(debug_session::DebugSession, name)
     v_type_as_string = ""
 
-    return Variable(name = name, type = v_type_as_string, value = "#undef", variablesReference = 0)
+    return Variable(name=name, type=v_type_as_string, value="#undef", variablesReference=0)
 end
 
 function get_keys_with_drop_take(value, skip_count, take_count)
@@ -584,7 +584,7 @@ function collect_global_refs(frame::JuliaInterpreter.Frame)
         func = frame.framedata.locals[1].value
         args = (Base.unwrap_unionall(m.sig).parameters[2:end]...,)
 
-        ci = code_typed(func, args, optimize = false)[1][1]
+        ci = code_typed(func, args, optimize=false)[1][1]
 
         return collect_global_refs(ci)
     catch err
@@ -593,14 +593,14 @@ function collect_global_refs(frame::JuliaInterpreter.Frame)
     end
 end
 
-function collect_global_refs(ci::Core.CodeInfo, refs = Set([]))
+function collect_global_refs(ci::Core.CodeInfo, refs=Set([]))
     for expr in ci.code
         collect_global_refs(expr, refs)
     end
     refs
 end
 
-function collect_global_refs(expr::Expr, refs = Set([]))
+function collect_global_refs(expr::Expr, refs=Set([]))
     args = Meta.isexpr(expr, :call) ? expr.args[2:end] : expr.args
     for arg in args
         collect_global_refs(arg, refs)
@@ -613,12 +613,12 @@ collect_global_refs(expr, refs) = nothing
 collect_global_refs(expr::GlobalRef, refs) = push!(refs, expr)
 
 function push_module_names!(variables, debug_session, mod)
-    for n in names(mod, all = true)
+    for n in names(mod, all=true)
         !isdefined(mod, n) && continue
         Base.isdeprecated(mod, n) && continue
 
         x = getfield(mod, n)
-    x === Main && continue
+        x === Main && continue
 
         s = string(n)
         startswith(s, "#") && continue
@@ -673,7 +673,7 @@ function variables_request(debug_session::DebugSession, params::VariablesArgumen
 
         if filter_type == "" || filter_type == "named"
             if (var_ref.value isa AbstractArray || var_ref.value isa AbstractDict) && !(var_ref.value isa Array) &&
-                fieldcount(container_type) > 0
+               fieldcount(container_type) > 0
                 push!(debug_session.varrefs, VariableReference(:fields, var_ref.value))
                 new_var_id = length(debug_session.varrefs)
                 named_count = fieldcount(container_type)
@@ -715,7 +715,7 @@ function variables_request(debug_session::DebugSession, params::VariablesArgumen
                             val = Base.invokelatest(getindex, var_ref.value, i)
                             s = construct_return_msg_for_var(debug_session, join(string.(i.I), ','), val)
                         catch err
-                            s = Variable(name = join(string.(i.I), ','), type = "", value = "#error", variablesReference = 0)
+                            s = Variable(name=join(string.(i.I), ','), type="", value="#error", variablesReference=0)
                         end
                         push!(variables, s)
                     end
@@ -798,7 +798,7 @@ function set_variable_request(debug_session::DebugSession, params::SetVariableAr
 
     if var_ref.kind == :scope
         try
-            ret = JuliaInterpreter.eval_code(var_ref.value, "$var_name = $var_value");
+            ret = JuliaInterpreter.eval_code(var_ref.value, "$var_name = $var_value")
 
             s = construct_return_msg_for_var(debug_session::DebugSession, "", ret)
 
@@ -877,7 +877,7 @@ function restart_frame_request(debug_session::DebugSession, params::RestartFrame
 
     curr_fr = JuliaInterpreter.leaf(debug_session.debug_engine.frame)
 
-        i = 1
+    i = 1
 
     while frame_id > i
         curr_fr = curr_fr.caller
@@ -896,7 +896,7 @@ function restart_frame_request(debug_session::DebugSession, params::RestartFrame
         debug_session.debug_engine.frame = curr_fr
     end
 
-    put!(debug_session.next_cmd, (cmd = :continue,))
+    put!(debug_session.next_cmd, (cmd=:continue,))
 
     return RestartFrameResponseResponseArguments()
 end
@@ -938,7 +938,7 @@ function evaluate_request(debug_session::DebugSession, params::EvaluateArguments
 
         return EvaluateResponseArguments(Base.invokelatest(sprintlimited, ret_val), missing, missing, 0, missing, missing, missing)
     catch err
-        @debug "error showing value" exception=(err, catch_backtrace())
+        @debug "error showing value" exception = (err, catch_backtrace())
         return EvaluateResponseArguments(string("Internal Error: ", sprint(showerror, err)), missing, missing, 0, missing, missing, missing)
     end
 end
@@ -988,11 +988,11 @@ end
 function disconnect_request(debug_session::DebugSession, params::DisconnectArguments)
     @debug "disconnect_request"
 
-    if debug_session.debug_engine!==nothing
+    if debug_session.debug_engine !== nothing
         DebugEngines.terminate(debug_session.debug_engine)
     end
 
-    put!(debug_session.next_cmd, (cmd = :terminate,))
+    put!(debug_session.next_cmd, (cmd=:terminate,))
 
     return DisconnectResponseArguments()
 end
@@ -1006,7 +1006,7 @@ function terminate_request(debug_session::DebugSession, params::TerminateArgumen
 end
 
 function threads_request(debug_session::DebugSession, params::Nothing)
-    return ThreadsResponseArguments([Thread(id = 1, name = "Main Thread")])
+    return ThreadsResponseArguments([Thread(id=1, name="Main Thread")])
 end
 
 function breakpointlocations_request(debug_session::DebugSession, params::BreakpointLocationsArguments)

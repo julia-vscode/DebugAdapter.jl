@@ -23,8 +23,8 @@ end
 
 function field_allows_missing(field::Expr)
     field.head == :(::) && field.args[2] isa Expr &&
-    field.args[2].head == :curly && field.args[2].args[1] == :Union &&
-    any(i -> i == :Missing, field.args[2].args)
+        field.args[2].head == :curly && field.args[2].args[1] == :Union &&
+        any(i -> i == :Missing, field.args[2].args)
 end
 
 function field_type(field::Expr, typename::String)
@@ -55,9 +55,9 @@ macro dict_readable(arg)
         $((arg))
 
         $(count_real_fields > 0 ? :(
-        function $tname(; $((get_kwsignature_for_field(field) for field in arg.args[3].args if !(field isa LineNumberNode))...))
-            $tname($((field.args[1] for field in arg.args[3].args if !(field isa LineNumberNode))...))
-        end
+            function $tname(; $((get_kwsignature_for_field(field) for field in arg.args[3].args if !(field isa LineNumberNode))...))
+                $tname($((field.args[1] for field in arg.args[3].args if !(field isa LineNumberNode))...))
+            end
         ) : nothing)
 
         function $tname(dict::Dict)

@@ -917,6 +917,10 @@ end
 function evaluate_request(debug_session::DebugSession, params::EvaluateArguments)
     @debug "evaluate_request"
 
+    if ismissing(params.frameId)
+        @info "evaluate_request called with missing frameId" params
+    end
+
     curr_fr = debug_session.debug_engine.frame
     curr_i = 1
 

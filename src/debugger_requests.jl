@@ -86,7 +86,7 @@ function launch_request(debug_session::DebugSession, params::JuliaLaunchArgument
             read(filename_to_debug, String)
         catch err
             # TODO Think about some way to return an error message in the UI
-            put!(debug_session.next_cmd, (cmd=:stop,))
+            put!(debug_session.next_cmd, (cmd=:terminate,))
             return LaunchResponseArguments()
         end
 
@@ -873,6 +873,7 @@ function set_variable_request(debug_session::DebugSession, params::SetVariableAr
 end
 
 function restart_frame_request(debug_session::DebugSession, params::RestartFrameArguments)
+    debug_engine = debug_session.debug_engine
     frame_id = params.frameId
 
     curr_fr = JuliaInterpreter.leaf(debug_session.debug_engine.frame)
@@ -896,7 +897,7 @@ function restart_frame_request(debug_session::DebugSession, params::RestartFrame
         debug_session.debug_engine.frame = curr_fr
     end
 
-    put!(debug_session.next_cmd, (cmd = :continue,))
+    put!(debug_engine.next_cmd, (cmd = :continue,))
 
     return RestartFrameResponseResponseArguments()
 end

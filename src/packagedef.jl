@@ -165,7 +165,7 @@ function Base.run(debug_session::DebugSession, error_handler=nothing)
 
                 put!(debug_session.finished_execution, true)
             else
-                error("Unknown command")
+                error("Unknown command $(next_cmd.cmd)")
             end
         end
 

@@ -85,9 +85,8 @@ function launch_request(debug_session::DebugSession, params::JuliaLaunchArgument
         file_content = try
             read(filename_to_debug, String)
         catch err
-            # TODO Think about some way to return an error message in the UI
             put!(debug_session.next_cmd, (cmd=:terminate,))
-            return LaunchResponseArguments()
+            return DAPError("Debugger failed to read the file `$filename_to_debug`.\n\n$(sprint(showerror, err))")
         end
 
         if params.compiledModulesOrFunctions !== missing

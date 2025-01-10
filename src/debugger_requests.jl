@@ -917,7 +917,7 @@ function evaluate_request(debug_session::DebugSession, params::EvaluateArguments
     @debug "evaluate_request"
 
     if ismissing(params.frameId)
-        @info "evaluate_request called with missing frameId" params
+        return EvaluateResponseArguments("Error: received evaluate request without a frameId, this shouldn't happen for the Julia debugger.", missing, missing, 0, missing, missing, missing)
     end
 
     curr_fr = debug_session.debug_engine.frame

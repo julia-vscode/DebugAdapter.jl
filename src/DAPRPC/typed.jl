@@ -74,8 +74,12 @@ function dispatch_msg(x::DAPEndpoint, dispatcher::MsgDispatcher, msg)
                 if param_type.a === Nothing || param_type.b === Nothing
                     if !haskey(msg, request_type == :request ? "arguments" : "body")
                         nothing
+                    elseif param_type.a !== Nothing
+                        param_type.a(msg[request_type == :request ? "arguments" : "body"])
+                    elseif param_type.b !== Nothing
+                        param_type.b(msg[request_type == :request ? "arguments" : "body"])
                     else
-                        param_type(msg[request_type == :request ? "arguments" : "body"])
+                        error("Invalid parameter type.")
                     end
                 else
                     param_type(msg[request_type == :request ? "arguments" : "body"])

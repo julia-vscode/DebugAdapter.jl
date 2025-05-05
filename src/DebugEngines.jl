@@ -37,7 +37,9 @@ mutable struct DebugEngine
             nothing,
             nothing,
 
-            JuliaInterpreter.finish_and_return!,
+            isdefined(JuliaInterpreter, :RecursiveInterpreter) ?
+                JuliaInterpreter.RecursiveInterpreter() :
+                JuliaInterpreter.finish_and_return!,
             String[],
             Set{Any}(),
             nothing,
@@ -403,10 +405,18 @@ function set_function_breakpoints!(debug_engine::DebugEngine, breakpoints)
 end
 
 function set_compiled_mode!(debug_engine::DebugEngine, compiled_mode::Bool)
-    if compiled_mode
-        debug_engine.compile_mode = JuliaInterpreter.Compiled()
+    if isdefined(JuliaInterpreter, :RecursiveInterpreter)
+        if compiled_mode
+            debug_engine.compile_mode = JuliaInterpreter.NonRecursiveInterpreter()
+        else
+            debug_engine.compile_mode = JuliaInterpreter.RecursiveInterpreter()
+        end
     else
-        debug_engine.compile_mode = JuliaInterpreter.finish_and_return!
+        if compiled_mode
+            debug_engine.compile_mode = JuliaInterpreter.Compiled()
+        else
+            debug_engine.compile_mode = JuliaInterpreter.finish_and_return!
+        end
     end
 end
 

@@ -999,7 +999,9 @@ end
 function terminate_request(debug_session::DebugSession, params::TerminateArguments)
     @debug "terminate_request"
 
-    DebugEngines.execution_terminate(debug_session.debug_engine)
+    if debug_session.debug_engine!==nothing
+        DebugEngines.execution_terminate(debug_session.debug_engine)
+    end
 
     return TerminateResponseArguments()
 end

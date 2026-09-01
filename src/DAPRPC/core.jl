@@ -1,6 +1,10 @@
 struct DAPError <: Exception
     msg::AbstractString
+    code::Int
+    data::Any
 end
+
+DAPError(msg::AbstractString) = DAPError(msg, -32603, nothing)
 
 mutable struct DAPEndpoint{IOIn <: IO,IOOut <: IO}
     pipe_in::IOIn
@@ -9,7 +13,7 @@ mutable struct DAPEndpoint{IOIn <: IO,IOOut <: IO}
     out_msg_queue::Channel{Any}
     in_msg_queue::Channel{Any}
 
-    outstanding_requests::Dict{String,Channel{Any}}
+    outstanding_requests::Dict{Int,Channel{Any}}
 
     err_handler::Union{Nothing,Function}
 
@@ -22,7 +26,7 @@ mutable struct DAPEndpoint{IOIn <: IO,IOOut <: IO}
 end
 
 DAPEndpoint(pipe_in, pipe_out, err_handler = nothing) =
-    DAPEndpoint(pipe_in, pipe_out, Channel{Any}(Inf), Channel{Any}(Inf), Dict{String,Channel{Any}}(), err_handler, :idle, nothing, nothing, 0)
+    DAPEndpoint(pipe_in, pipe_out, Channel{Any}(Inf), Channel{Any}(Inf), Dict{Int,Channel{Any}}(), err_handler, :idle, nothing, nothing, 0)
 
 function write_transport_layer(stream, response)
     response_utf8 = transcode(UInt8, response)
@@ -102,7 +106,7 @@ function Base.run(x::DAPEndpoint)
                 break
             end
 
-            message_dict = JSON.parse(message)
+            message_dict = _parse_json(message)
 
             if message_dict["type"] == "request" || message_dict["type"] == "event"
                 try
@@ -116,7 +120,7 @@ function Base.run(x::DAPEndpoint)
                 end
             elseif message_dict["type"] == "response"
                 # This must be a response
-                id_of_request = message_dict["request_seq"]
+                id_of_request = Int(message_dict["request_seq"])
 
                 channel_for_response = x.outstanding_requests[id_of_request]
                 put!(channel_for_response, message_dict)
@@ -151,7 +155,7 @@ function send_notification(x::DAPEndpoint, method::AbstractString, params)
 
     message = Dict("seq" => x.seq, "type" => "event", "event" => method, "body" => params)
 
-    message_json = JSON.json(message)
+    message_json = _json(message)
 
     put!(x.out_msg_queue, message_json)
 
@@ -170,7 +174,7 @@ function send_request(x::DAPEndpoint, method::AbstractString, params)
     response_channel = Channel{Any}(1)
     x.outstanding_requests[x.seq] = response_channel
 
-    message_json = JSON.json(message)
+    message_json = _json(message)
 
     put!(x.out_msg_queue, message_json)
 
@@ -179,11 +183,27 @@ function send_request(x::DAPEndpoint, method::AbstractString, params)
     if response["success"]==true
         return response["body"]
     elseif response["success"]==false
-        error_message = response["message"]
-        throw(DAPError(error_message))
+        throw(dap_error(response))
     else
         throw(DAPError("ERROR AT THE TRANSPORT LEVEL"))
     end
+end
+
+# The structured `Message` in `body.error` is optional in DAP, and only it
+# carries the error id and variables, so fall back to the short `message` the
+# response is required to have when the peer did not send one.
+function dap_error(response)
+    fallback = get(response, "message", "The request failed.")
+
+    body = get(response, "body", nothing)
+    error_message = body isa AbstractDict ? get(body, "error", nothing) : nothing
+    error_message isa AbstractDict || return DAPError(fallback)
+
+    return DAPError(
+        get(error_message, "format", fallback),
+        Int(get(error_message, "id", -32603)),
+        get(error_message, "variables", nothing),
+    )
 end
 
 function get_next_message(endpoint::DAPEndpoint)
@@ -215,7 +235,7 @@ function send_success_response(endpoint, original_request, result)
 
     response = Dict("seq" => endpoint.seq, "type" => "response", "request_seq" => original_request["seq"], "success" => true, "command" => original_request["command"], "body" => result)
 
-    response_json = JSON.json(response)
+    response_json = _json(response)
 
     put!(endpoint.out_msg_queue, response_json)
 end
@@ -225,9 +245,23 @@ function send_error_response(endpoint, original_request, code, message, data)
 
     endpoint.seq += 1
 
-    response = Dict("seq" => endpoint.seq, "request_seq" => original_request["seq"], "error" => Dict("code" => code, "message" => message, "data" => data))
+    error_body = Dict{String,Any}("id" => code, "format" => message)
+    # `isnothing` postdates the Julia versions this package supports.
+    if data !== nothing
+        error_body["variables"] = data
+    end
 
-    response_json = JSON.json(response)
+    response = Dict(
+        "seq" => endpoint.seq,
+        "type" => "response",
+        "request_seq" => original_request["seq"],
+        "success" => false,
+        "command" => original_request["command"],
+        "message" => message,
+        "body" => Dict("error" => error_body),
+    )
+
+    response_json = _json(response)
 
     put!(endpoint.out_msg_queue, response_json)
 end

@@ -15,3 +15,32 @@ jobs:
     permissions: write-all
     secrets:
       codecov_token: ${{ secrets.CODECOV_TOKEN }}
+
+  json-compat:
+    name: JSON ${{ matrix.json-version }}
+    # Only run where `github.ref` points at the code under test. On
+    # `issue_comment` it points at the default branch, so the job would test
+    # main while reporting its status on the pull request.
+    if: >-
+      github.event_name == 'push' || github.event_name == 'pull_request' ||
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.feature == 'LintAndTest')
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        json-version: ["0.20", "0.21", "1.7"]
+    env:
+      DEBUGADAPTER_EXPECTED_JSON_VERSION: ${{ matrix.json-version }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: julia-actions/setup-julia@v2
+        with:
+          version: "1"
+      - uses: julia-actions/cache@v2
+      - name: Install JSON ${{ matrix.json-version }}
+        # Pin so that the resolve `Pkg.test` runs for the test-only dependencies
+        # cannot quietly move JSON to a different version. The test suite
+        # asserts the version it actually loaded against the env var above.
+        run: |
+          julia --project=. -e 'using Pkg; Pkg.add(PackageSpec(name="JSON", version="${{ matrix.json-version }}")); Pkg.pin("JSON"); Pkg.status()'
+      - uses: julia-actions/julia-runtest@v1

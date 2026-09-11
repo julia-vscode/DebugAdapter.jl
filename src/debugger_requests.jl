@@ -912,11 +912,18 @@ function restart_frame_request(debug_session::DebugSession, params::RestartFrame
     debug_engine = debug_session.debug_engine
     frame_id = params.frameId
 
-    curr_fr = JuliaInterpreter.leaf(debug_session.debug_engine.frame)
+    if frame_id < 1 || debug_engine.frame === nothing
+        return DAPError("Invalid frameId.")
+    end
 
-        i = 1
+    curr_fr = JuliaInterpreter.leaf(debug_engine.frame)
+
+    i = 1
 
     while frame_id > i
+        if curr_fr.caller === nothing
+            return DAPError("Invalid frameId.")
+        end
         curr_fr = curr_fr.caller
         i += 1
     end
@@ -924,13 +931,13 @@ function restart_frame_request(debug_session::DebugSession, params::RestartFrame
     if curr_fr.caller === nothing
         # We are in the top level
 
-        debug_session.debug_engine.frame = get_next_top_level_frame(debug_session)
+        debug_engine.frame = DebugEngines.get_next_top_level_frame(debug_engine)
     else
         curr_fr.pc = 1
         curr_fr.assignment_counter = 1
         curr_fr.callee = nothing
 
-        debug_session.debug_engine.frame = curr_fr
+        debug_engine.frame = curr_fr
     end
 
     put!(debug_engine.next_cmd, (cmd = :continue,))

@@ -545,25 +545,77 @@ function source_request(debug_session::DebugSession, params::SourceArguments)
     return SourceResponseArguments(code, missing)
 end
 
+"""
+    error_message(err; limit = 200) -> String
+
+`err` rendered for display in a response. The errors the debugger catches while rendering
+came out of the debuggee's own code, so `showerror` can itself throw and needs its own
+fallback — and so can printing the type it falls back to.
+"""
+function error_message(err; limit = 200)
+    try
+        return Base.invokelatest(sprintlimited, err, func = showerror, limit = limit)
+    catch
+        try
+            return Base.invokelatest(sprintlimited, typeof(err), limit = limit)
+        catch
+            return "an error that could not be displayed"
+        end
+    end
+end
+
+"""
+    safe_show(value) -> String
+
+`sprintlimited(value)` that reports rather than throws. Everything a `variables` response
+renders comes out of user objects, whose `show` — including `show(::IO, ::Type{…})` — can
+throw, and that must not cost the client its response. The DAP `Variable` has no field for
+"this failed", so the reason goes into the value the user reads.
+"""
+function safe_show(value)
+    try
+        return Base.invokelatest(sprintlimited, value)
+    catch err
+        return string("#error: ", error_message(err))
+    end
+end
+
+construct_error_msg_for_var(name, value) =
+    Variable(name = name, value = value, type = "", variablesReference = 0)
+
+"""
+    with_error_placeholder(f, name) -> Variable
+
+Run `f`, which builds the `Variable` for one entry of a variables response and therefore
+calls into user code, and substitute a placeholder carrying the reason if it throws: one
+unrenderable entry must not cost the client the rest of the list.
+"""
+function with_error_placeholder(f, name)
+    try
+        return f()
+    catch err
+        return construct_error_msg_for_var(name, string("#error: ", error_message(err)))
+    end
+end
+
 function construct_return_msg_for_var(debug_session::DebugSession, name, value)
     v_type = typeof(value)
-    v_value_as_string = try
-        Base.invokelatest(sprintlimited, value)
-    catch err
-        @debug "error showing value" exception=(err, catch_backtrace())
-        "Error while showing this value."
-    end
+    v_value_as_string = safe_show(value)
 
     if (isstructtype(v_type) || value isa AbstractArray || value isa AbstractDict) && !(value isa String || value isa Symbol)
         push!(debug_session.varrefs, VariableReference(:var, value))
         new_var_id = length(debug_session.varrefs)
 
-        named_count = if value isa Array || value isa Tuple
-            0
-        elseif value isa AbstractArray || value isa AbstractDict
-            fieldcount(v_type) > 0 ? 1 : 0
+        named_count = try
+            if value isa Array || value isa Tuple
+                0
+            elseif value isa AbstractArray || value isa AbstractDict
+                fieldcount(v_type) > 0 ? 1 : 0
             else
-            fieldcount(v_type)
+                fieldcount(v_type)
+            end
+        catch
+            0
         end
 
         indexed_count = zero(Int64)
@@ -578,13 +630,13 @@ function construct_return_msg_for_var(debug_session::DebugSession, name, value)
         return Variable(
             name = name,
             value = v_value_as_string,
-            type = string(v_type),
+            type = safe_show(v_type),
             variablesReference = new_var_id,
             namedVariables = named_count,
             indexedVariables = indexed_count
         )
     else
-        return Variable(name = name, value = v_value_as_string, type = string(v_type), variablesReference = 0)
+        return Variable(name = name, value = v_value_as_string, type = safe_show(v_type), variablesReference = 0)
     end
 end
 
@@ -592,6 +644,19 @@ function construct_return_msg_for_var_with_undef_value(debug_session::DebugSessi
     v_type_as_string = ""
 
     return Variable(name = name, type = v_type_as_string, value = "#undef", variablesReference = 0)
+end
+
+function push_field_variables!(variables, debug_session::DebugSession, value, skip_count, take_count)
+    container_type = typeof(value)
+
+    for i in Iterators.take(Iterators.drop(1:fieldcount(container_type), skip_count), take_count)
+        name = string(fieldname(container_type, i))
+        push!(variables, with_error_placeholder(name) do
+            isdefined(value, i) ?
+                construct_return_msg_for_var(debug_session, name, getfield(value, i)) :
+                construct_return_msg_for_var_with_undef_value(debug_session, name)
+        end)
+    end
 end
 
 function get_keys_with_drop_take(value, skip_count, take_count)
@@ -649,7 +714,9 @@ function push_module_names!(variables, debug_session, mod)
         s = string(n)
         startswith(s, "#") && continue
 
-        push!(variables, construct_return_msg_for_var(debug_session, s, x))
+        push!(variables, with_error_placeholder(s) do
+            construct_return_msg_for_var(debug_session, s, x)
+        end)
     end
 end
 
@@ -684,13 +751,17 @@ function variables_request(debug_session::DebugSession, params::VariablesArgumen
             # TODO Figure out why #self# is here in the first place
             # For now we don't report it to the client
             if !startswith(string(v.name), "#") && string(v.name) != ""
-                push!(variables, construct_return_msg_for_var(debug_session, string(v.name), v.value))
+                name = string(v.name)
+                push!(variables, with_error_placeholder(name) do
+                    construct_return_msg_for_var(debug_session, name, v.value)
+                end)
             end
         end
 
         if JuliaInterpreter.isexpr(JuliaInterpreter.pc_expr(curr_fr), :return)
-            ret_val = JuliaInterpreter.get_return(curr_fr)
-            push!(variables, construct_return_msg_for_var(debug_session, "Return Value", ret_val))
+            push!(variables, with_error_placeholder("Return Value") do
+                construct_return_msg_for_var(debug_session, "Return Value", JuliaInterpreter.get_return(curr_fr))
+            end)
         end
     elseif var_ref.kind == :scope_globals
         curr_fr = var_ref.value
@@ -698,7 +769,10 @@ function variables_request(debug_session::DebugSession, params::VariablesArgumen
 
         for g in globals
             if isdefined(g.mod, g.name)
-                push!(variables, construct_return_msg_for_var(debug_session, string(g.name), getfield(g.mod, g.name)))
+                name = string(g.name)
+                push!(variables, with_error_placeholder(name) do
+                    construct_return_msg_for_var(debug_session, name, getfield(g.mod, g.name))
+                end)
             end
         end
     elseif var_ref.kind == :module
@@ -727,86 +801,48 @@ function variables_request(debug_session::DebugSession, params::VariablesArgumen
             elseif var_ref.value isa Module
                 push_module_names!(variables, debug_session, var_ref.value)
             else
-                for i = Iterators.take(Iterators.drop(1:fieldcount(container_type), skip_count), take_count)
-                    s = isdefined(var_ref.value, i) ?
-                        construct_return_msg_for_var(debug_session, string(fieldname(container_type, i)), getfield(var_ref.value, i)) :
-                        construct_return_msg_for_var_with_undef_value(debug_session, string(fieldname(container_type, i)))
-                    push!(variables, s)
-                end
+                push_field_variables!(variables, debug_session, var_ref.value, skip_count, take_count)
             end
         end
 
         if (filter_type == "" || filter_type == "indexed")
+            # Enumerating the container (`size`, `axes`, `keys`, `iterate`) is user code too;
+            # if that fails nothing can be listed, so say so — and why. Entries pushed before
+            # the failure are kept.
             try
                 if var_ref.value isa Tuple
                     for i in Iterators.take(Iterators.drop(1:length(var_ref.value), skip_count), take_count)
-                        s = construct_return_msg_for_var(debug_session, join(string.(i), ','), var_ref.value[i])
-                        push!(variables, s)
+                        name = string(i)
+                        push!(variables, with_error_placeholder(name) do
+                            construct_return_msg_for_var(debug_session, name, var_ref.value[i])
+                        end)
                     end
                 elseif var_ref.value isa AbstractArray
                     for i in Base.invokelatest(get_cartesian_with_drop_take, var_ref.value, skip_count, take_count)
-                        s = ""
-                        try
-                            val = Base.invokelatest(getindex, var_ref.value, i)
-                            s = construct_return_msg_for_var(debug_session, join(string.(i.I), ','), val)
-                        catch err
-                            s = Variable(name = join(string.(i.I), ','), type = "", value = "#error", variablesReference = 0)
-                        end
-                        push!(variables, s)
+                        name = join(string.(i.I), ',')
+                        push!(variables, with_error_placeholder(name) do
+                            construct_return_msg_for_var(debug_session, name, Base.invokelatest(getindex, var_ref.value, i))
+                        end)
                     end
                 elseif var_ref.value isa AbstractDict
                     for i in Base.invokelatest(get_keys_with_drop_take, var_ref.value, skip_count, take_count)
-                        key_as_string = try
-                            Base.invokelatest(repr, i)
-                        catch err
-                            "Error while showing this value."
-                        end
-                        s = ""
-                        try
-                            val = Base.invokelatest(getindex, var_ref.value, i)
-                            s = construct_return_msg_for_var(debug_session, key_as_string, val)
-                        catch err
-                            s = Variable(
-                                join(string.(i.I), ','),
-                                "#error",
-                                "",
-                                missing,
-                                missing,
-                                0,
-                                0,
-                                0,
-                                missing
-                            )
-                        end
-                        push!(variables, s)
+                        name = safe_show(i)
+                        push!(variables, with_error_placeholder(name) do
+                            construct_return_msg_for_var(debug_session, name, Base.invokelatest(getindex, var_ref.value, i))
+                        end)
                     end
                 end
             catch err
-                push!(variables, Variable(
+                push!(variables, construct_error_msg_for_var(
                     "#error",
-                    "This type doesn't implement the expected interface",
-                    "",
-                    missing,
-                    missing,
-                    0,
-                    0,
-                    0,
-                    missing
+                    string("This type doesn't implement the expected interface: ", error_message(err))
                 ))
             end
         end
     elseif var_ref.kind == :fields
-        container_type = typeof(var_ref.value)
-
         if filter_type == "" || filter_type == "named"
-            for i = Iterators.take(Iterators.drop(1:fieldcount(container_type), skip_count), take_count)
-                s = isdefined(var_ref.value, i) ?
-                    construct_return_msg_for_var(debug_session, string(fieldname(container_type, i)), getfield(var_ref.value, i)) :
-                    construct_return_msg_for_var_with_undef_value(debug_session, string(fieldname(container_type, i)))
-                push!(variables, s)
-            end
+            push_field_variables!(variables, debug_session, var_ref.value, skip_count, take_count)
         end
-
     end
 
     return VariablesResponseArguments(variables)

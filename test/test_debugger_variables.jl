@@ -219,3 +219,13 @@ end
     @test response.description isa String
 end
 
+@testitem "setVariable with a stale variable reference reports an error" begin
+    # The varrefs are cleared on every stop, so a reference from a previous stop names
+    # nothing. Reporting that relies on `DAPError` being in scope here at all.
+    result = DebugAdapter.set_variable_request(
+        DebugAdapter.DebugSession(IOBuffer()),
+        DebugAdapter.SetVariableArguments(variablesReference = 99, name = "x", value = "1")
+    )
+
+    @test result isa DebugAdapter.DAPError
+end

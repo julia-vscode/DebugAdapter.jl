@@ -8,7 +8,7 @@ module DAPRPC
 
     include("DAPRPC/packagedef.jl")
 end
-import .DAPRPC: @dict_readable, Outbound
+import .DAPRPC: @dict_readable, DAPError, Outbound
 
 include("DebugEngines.jl")
 include("protocol/debug_adapter_protocol.jl")

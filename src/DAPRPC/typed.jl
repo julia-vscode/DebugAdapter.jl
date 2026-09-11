@@ -57,54 +57,79 @@ end
 
 function dispatch_msg(x::DAPEndpoint, dispatcher::MsgDispatcher, msg)
     dispatcher._currentlyHandlingMsg = true
+    is_request = get(msg, "type", nothing) == "request"
+    response_sent = false
     try
-        method_name, request_type = if msg["type"]  == "request"
-            msg["command"], :request
-        elseif msg["type"] == "event"
-            msg["event"], :event
-        else
-            error()
-        end
-        handler = get(dispatcher._handlers, method_name, nothing)
-        if handler !== nothing
-            param_type = get_param_type(handler.message_type)
-            params = if param_type === Nothing
-                nothing
-            elseif param_type isa Union
-                if param_type.a === Nothing || param_type.b === Nothing
-                    if !haskey(msg, request_type == :request ? "arguments" : "body")
-                        nothing
-                    elseif param_type.a !== Nothing
-                        param_type.a(msg[request_type == :request ? "arguments" : "body"])
-                    elseif param_type.b !== Nothing
-                        param_type.b(msg[request_type == :request ? "arguments" : "body"])
+        try
+            method_name, request_type = if msg["type"]  == "request"
+                msg["command"], :request
+            elseif msg["type"] == "event"
+                msg["event"], :event
+            else
+                error()
+            end
+            handler = get(dispatcher._handlers, method_name, nothing)
+            if handler !== nothing
+                param_type = get_param_type(handler.message_type)
+                params = if param_type === Nothing
+                    nothing
+                elseif param_type isa Union
+                    if param_type.a === Nothing || param_type.b === Nothing
+                        if !haskey(msg, request_type == :request ? "arguments" : "body")
+                            nothing
+                        elseif param_type.a !== Nothing
+                            param_type.a(msg[request_type == :request ? "arguments" : "body"])
+                        elseif param_type.b !== Nothing
+                            param_type.b(msg[request_type == :request ? "arguments" : "body"])
+                        else
+                            error("Invalid parameter type.")
+                        end
                     else
-                        error("Invalid parameter type.")
+                        param_type(msg[request_type == :request ? "arguments" : "body"])
                     end
+                elseif param_type <: NamedTuple
+                    convert(param_type,(;(Symbol(i[1])=>i[2] for i in msg[request_type == :request ? "arguments" : "body"])...))
                 else
                     param_type(msg[request_type == :request ? "arguments" : "body"])
                 end
-            elseif param_type <: NamedTuple
-                convert(param_type,(;(Symbol(i[1])=>i[2] for i in msg[request_type == :request ? "arguments" : "body"])...))
+
+                res = handler.func(params)
+
+                if handler.message_type isa RequestType
+                    if res isa DAPError
+                        send_error_response(x, msg, -32603, res.msg, nothing)
+                        response_sent = true
+                    elseif res isa get_return_type(handler.message_type)
+                        send_success_response(x, msg, res)
+                        response_sent = true
+                    else
+                        error_msg = "The handler for the '$method_name' request returned a value of type $(typeof(res)), which is not a valid return type according to the request definition."
+                        send_error_response(x, msg, -32603, error_msg, nothing)
+                        response_sent = true
+                        error(error_msg)
+                    end
+                end
             else
-                param_type(msg[request_type == :request ? "arguments" : "body"])
+                error("Unknown method $method_name.")
             end
-
-            res = handler.func(params)
-
-            if handler.message_type isa RequestType
-                if res isa DAPError
-                    send_error_response(x, msg, res.code, res.msg, res.data)
-                elseif res isa get_return_type(handler.message_type)
-                    send_success_response(x, msg, res)
-                else
-                    error_msg = "The handler for the '$method_name' request returned a value of type $(typeof(res)), which is not a valid return type according to the request definition."
-                    send_error_response(x, msg, -32603, error_msg, nothing)
-                    error(error_msg)
+        catch err
+            # A request whose handler throws would otherwise never be answered, and the
+            # client waits forever: for `variables`, a debug pane that spins for the rest
+            # of the session. Answer it, then rethrow so that `run`'s error handler still
+            # sees the failure — it is a bug in the adapter, not something to swallow.
+            if is_request && !response_sent
+                reason = try
+                    sprint(showerror, err)
+                catch
+                    "an error that could not be displayed"
+                end
+                try
+                    send_error_response(x, msg, -32603, string("The '", get(msg, "command", "?"), "' request failed: ", reason), nothing)
+                catch
+                    # The endpoint may already be closed; the rethrow below still reports.
                 end
             end
-        else
-            error("Unknown method $method_name.")
+            rethrow()
         end
     finally
         dispatcher._currentlyHandlingMsg = false

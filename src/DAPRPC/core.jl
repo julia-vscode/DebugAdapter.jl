@@ -220,12 +220,27 @@ function send_success_response(endpoint, original_request, result)
     put!(endpoint.out_msg_queue, response_json)
 end
 
-function send_error_response(endpoint, original_request, code, message, data)
+function send_error_response(endpoint, original_request, id, message, variables)
     check_dead_endpoint!(endpoint)
 
     endpoint.seq += 1
 
-    response = Dict("seq" => endpoint.seq, "request_seq" => original_request["seq"], "error" => Dict("code" => code, "message" => message, "data" => data))
+    # A DAP client dispatches on `type` and reads `success`/`message`, so anything else is
+    # dropped on the floor and the request hangs. `body.error` is a DAP `Message`, whose
+    # `format` is a template the client fills from `variables` — VS Code leaves `{...}`
+    # groups it has no variable for untouched, so Julia type names survive intact.
+    error_body = Dict{String,Any}("id" => id, "format" => message, "showUser" => true)
+    variables === nothing || (error_body["variables"] = variables)
+
+    response = Dict(
+        "seq" => endpoint.seq,
+        "type" => "response",
+        "request_seq" => original_request["seq"],
+        "success" => false,
+        "command" => original_request["command"],
+        "message" => message,
+        "body" => Dict("error" => error_body)
+    )
 
     response_json = JSON.json(response)
 

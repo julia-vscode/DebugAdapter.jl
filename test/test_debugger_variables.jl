@@ -183,7 +183,9 @@ end
 @testitem "variables of an unrenderable value under Fields" setup=[HostileValues] begin
     session = session_for(DictWithThrowingField(ThrowingShow()))
 
-    fields = only(variables_of(session))
+    top = variables_of(session)
+    @test length(top) == 1
+    fields = top[1]
     @test fields.name == "Fields"
 
     variables = variables_of(session, fields.variablesReference)
@@ -194,9 +196,10 @@ end
 @testitem "variables of a value whose error cannot be shown either" setup=[HostileValues] begin
     # Reporting the reason means calling `showerror` on an exception that came out of user
     # code, which can be just as broken as the `show` that raised it.
-    variable = only(variables_for(HasThrowingErrorField(ThrowsBrokenError())))
+    variables = variables_for(HasThrowingErrorField(ThrowsBrokenError()))
 
-    @test occursin("BrokenError", variable.value)
+    @test length(variables) == 1
+    @test occursin("BrokenError", variables[1].value)
 end
 
 @testitem "exception info for an exception whose showerror throws" setup=[HostileValues] begin

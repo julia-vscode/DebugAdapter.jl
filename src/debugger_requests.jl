@@ -653,6 +653,14 @@ function push_module_names!(variables, debug_session, mod)
     end
 end
 
+function get_variable_reference(debug_session::DebugSession, var_ref_id)
+    if var_ref_id isa Integer && 1 <= var_ref_id <= length(debug_session.varrefs)
+        return debug_session.varrefs[var_ref_id]
+    end
+
+    return nothing
+end
+
 function variables_request(debug_session::DebugSession, params::VariablesArguments)
     @debug "getvariables_request"
 
@@ -662,9 +670,10 @@ function variables_request(debug_session::DebugSession, params::VariablesArgumen
     skip_count = coalesce(params.start, 0)
     take_count = coalesce(params.count, typemax(Int))
 
-    var_ref = debug_session.varrefs[var_ref_id]
-
     variables = Variable[]
+
+    var_ref = get_variable_reference(debug_session, var_ref_id)
+    var_ref === nothing && return VariablesResponseArguments(variables)
 
     if var_ref.kind == :scope
         curr_fr = var_ref.value
@@ -820,7 +829,8 @@ function set_variable_request(debug_session::DebugSession, params::SetVariableAr
         return DAPError(string("Something went wrong in the eval: ", sprint(showerror, err)))
     end
 
-    var_ref = debug_session.varrefs[varref_id]
+    var_ref = get_variable_reference(debug_session, varref_id)
+    var_ref === nothing && return DAPError("Variable reference is no longer valid.")
 
     if var_ref.kind == :scope
         try

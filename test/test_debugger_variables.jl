@@ -199,3 +199,23 @@ end
     @test occursin("BrokenError", variable.value)
 end
 
+@testitem "exception info for an exception whose showerror throws" setup=[HostileValues] begin
+    # This request fires on every uncaught-exception stop, and both the id and the
+    # description are rendered from the user's own exception object.
+    session = DebugAdapter.DebugSession(IOBuffer())
+    session.debug_engine = DebugAdapter.DebugEngines.DebugEngine(
+        Main, "", "test.jl", false, (args...) -> nothing
+    )
+    session.debug_engine.last_exception = BrokenError()
+
+    response = hostile() do
+        DebugAdapter.exception_info_request(
+            session,
+            DebugAdapter.ExceptionInfoArguments(threadId = 1)
+        )
+    end
+
+    @test occursin("BrokenError", response.exceptionId)
+    @test response.description isa String
+end
+

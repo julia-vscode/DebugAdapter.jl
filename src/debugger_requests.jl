@@ -982,13 +982,16 @@ function restart_frame_request(debug_session::DebugSession, params::RestartFrame
 end
 
 function exception_info_request(debug_session::DebugSession, params::ExceptionInfoArguments)
-    exception_id = string(typeof(debug_session.debug_engine.last_exception))
-    exception_description = Base.invokelatest(sprint, Base.showerror, debug_session.debug_engine.last_exception)
+    # This request fires on every uncaught-exception stop, and both the id and the
+    # description are rendered from the debuggee's own exception object.
+    last_exception = debug_session.debug_engine.last_exception
+    exception_id = safe_show(typeof(last_exception))
+    exception_description = error_message(last_exception, limit = 100_000)
 
     exception_stacktrace = try
         Base.invokelatest(sprint, Base.show_backtrace, debug_session.debug_engine.frame)
     catch err
-        "Error while printing the backtrace."
+        string("Error while printing the backtrace: ", error_message(err))
     end
 
     return ExceptionInfoResponseArguments(exception_id, exception_description, "userUnhandled", ExceptionDetails(missing, missing, missing, missing, exception_stacktrace, missing))

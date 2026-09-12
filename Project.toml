@@ -20,4 +20,4 @@ test = ["Test", "TestItemRunner"]
 [compat]
 julia = "1"
 JuliaInterpreter = "0.8.5, 0.9, 0.10, 0.11"
-JSON = "0.20, 0.21"
+JSON = "0.20, 0.21, 1.8"

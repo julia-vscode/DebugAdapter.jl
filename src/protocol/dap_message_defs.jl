@@ -48,6 +48,7 @@ const attach_request_type = DAPRPC.RequestType("attach", JuliaAttachArguments, A
 const initialized_notification_type = DAPRPC.EventType("initialized", InitializedEventArguments)
 const configuration_done_request_type = DAPRPC.RequestType("configurationDone", Union{ConfigurationDoneArguments,Nothing}, ConfigurationDoneResponseArguments)
 const terminated_notification_type = DAPRPC.EventType("terminated", TerminatedEventArguments)
+const output_notification_type = DAPRPC.EventType("output", OutputEventArguments)
 
 @dict_readable struct DebugArguments <: Outbound
     stopOnEntry::Bool

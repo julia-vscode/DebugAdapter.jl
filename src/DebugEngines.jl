@@ -289,18 +289,34 @@ is_valid_expression(x) = true # atom
 is_valid_expression(::Nothing) = false # empty
 is_valid_expression(ex::Expr) = !Meta.isexpr(ex, (:incomplete, :error))
 
+"""
+The code handed to the debugger is not parseable Julia, so there is nothing to
+step through.
+
+That is the state of the user's file, not a defect in the debugger, which is
+why it is a type of its own: the caller turns it into a message in the debug
+console, where it used to escape as a bare `ErrorException("Invalid
+expression")` and be filed as a crash.
+"""
+struct InvalidExpressionError <: Exception
+    filename::String
+end
+
+function Base.showerror(io::IO, err::InvalidExpressionError)
+    print(io, "Cannot debug `", err.filename, "`: it is not valid Julia code.")
+end
+
 function Base.run(debug_engine::DebugEngine)
     # @debug "setting source_path" file = params.file
     task_local_storage()[:SOURCE_PATH] = debug_engine.filename
 
     ex = Base.parse_input_line(debug_engine.code; filename=debug_engine.filename)
 
-    # handle a case when lowering fails
+    # An unparseable file (or one that is empty, or whose lowering failed) has
+    # nothing to debug. The caller answers this with a message in the debug
+    # console and ends the session.
     if !is_valid_expression(ex)
-        error("Invalid expression")
-        # TODO Think about some way to return an error message in the UI
-        # put!(debug_engine.next_cmd, (cmd=:stop,))
-        # return LaunchResponseArguments()
+        throw(InvalidExpressionError(debug_engine.filename))
     end
 
     debug_engine.expr_splitter = JuliaInterpreter.ExprSplitter(debug_engine.mod, ex) # TODO: line numbers ?

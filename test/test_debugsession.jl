@@ -112,6 +112,28 @@ end
     @test count(==("terminated"), events) == 1
 end
 
+@testitem "code that cannot be parsed ends the session with a message, not a crash" setup=[DapClient] begin
+    # An unparseable file has nothing to step through, which is the state of the user's
+    # code rather than a defect here. It used to escape `run` as
+    # `ErrorException("Invalid expression")`, out of the session loop and into the REPL's
+    # crash handler, so the user got a crash report and no explanation. It now reaches
+    # the debug console, and the session is still there for whatever is debugged next.
+    module UnparseableTarget
+        ran = false
+    end
+
+    events, _ = with_debug_session() do session
+        DebugAdapter.debug_code(session, UnparseableTarget, "function f(
+", "broken.jl"; notify_termination=false)
+        DebugAdapter.debug_code(session, UnparseableTarget, "ran = true
+", "body.jl")
+    end
+
+    @test count(==("output"), events) == 1
+    @test UnparseableTarget.ran == true
+    @test count(==("terminated"), events) == 1
+end
+
 @testitem "initialize clears file breakpoints left over from an earlier session" begin
     import JuliaInterpreter
 

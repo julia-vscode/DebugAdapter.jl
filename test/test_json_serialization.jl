@@ -74,11 +74,25 @@ end
 @testitem "JSON version under test" begin
     import JSON
 
-    # Set by the `json-compat` CI job. `Pkg.test` resolves in its own sandbox
-    # environment, so this is the only place that can confirm which JSON.jl
-    # version the suite actually ran against.
+    # `pkgversion` postdates the Julia versions this package supports, so fall
+    # back to reading the version out of the loaded package's Project.toml.
+    # Line-based, because the TOML stdlib is not there on Julia 1.0 either.
+    function loaded_json_version()
+        isdefined(Base, :pkgversion) && return string(Base.pkgversion(JSON))
+        project = joinpath(dirname(dirname(pathof(JSON))), "Project.toml")
+        for line in readlines(project)
+            m = match(r"^version\s*=\s*\"(.*)\"", strip(line))
+            m === nothing || return m.captures[1]
+        end
+        error("No version found in $project")
+    end
+
+    # Set by the `Julia CI (JSON 0.20)` workflow. `Pkg.test` resolves in its own
+    # sandbox environment, which the manifest check there cannot see, so this is
+    # the only place that can confirm which JSON.jl version the suite actually
+    # ran against.
     expected = get(ENV, "DEBUGADAPTER_EXPECTED_JSON_VERSION", "")
     if !isempty(expected)
-        @test startswith(string(pkgversion(JSON)), expected * ".")
+        @test startswith(loaded_json_version(), expected * ".")
     end
 end

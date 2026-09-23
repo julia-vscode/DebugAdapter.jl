@@ -1,24 +1,24 @@
 abstract type Outbound end
 
-function JSON.Writer.CompositeTypeWrapper(t::Outbound)
-    fns = collect(fieldnames(typeof(t)))
-    dels = Int[]
-    for i = 1:length(fns)
-        f = fns[i]
-        if getfield(t, f) isa Missing
-            push!(dels, i)
-        end
-    end
-    deleteat!(fns, dels)
-    JSON.Writer.CompositeTypeWrapper(t, Tuple(fns))
-end
-
+# Optional DAP fields are represented as `missing` and must be omitted from the
+# wire format entirely, rather than serialized as `null`.
+#
+# We lower to a `Dict{String,Any}` rather than to a `NamedTuple` of the present
+# fields: a `NamedTuple` would mint a distinct concrete type for every subset of
+# non-missing fields, forcing the JSON writer to compile a fresh specialization
+# for each shape a type happens to take. Types like `StackFrame` and `Variable`
+# are sent with varying field sets while stepping, so that cost is paid over and
+# over during an interactive session. A `Dict` also serializes as `{}` when no
+# field is present, which every supported JSON.jl version handles.
 function JSON.lower(a::Outbound)
-    if nfields(a) > 0
-        JSON.Writer.CompositeTypeWrapper(a)
-    else
-        nothing
+    nfields(a) == 0 && return nothing
+
+    result = Dict{String,Any}()
+    for field in fieldnames(typeof(a))
+        value = getfield(a, field)
+        ismissing(value) || (result[String(field)] = value)
     end
+    return result
 end
 
 function field_allows_missing(field::Expr)
@@ -60,7 +60,7 @@ macro dict_readable(arg)
         end
         ) : nothing)
 
-        function $tname(dict::Dict)
+        function $tname(dict::AbstractDict)
         end
     end
 

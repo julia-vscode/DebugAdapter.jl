@@ -1,0 +1,91 @@
+name: Julia CI (JSON 0.20)
+
+# Tests DebugAdapter against JSON 0.20 on every supported Julia version. The VS
+# Code extension uses JSON 0.20 on all Julia versions because it is the last
+# JSON version without non-stdlib dependencies, so this combination has to keep
+# working even though a plain resolve would pick JSON 0.21 (Julia <= 1.8) or
+# JSON 1.x (Julia >= 1.9). This is deliberately a standalone workflow built
+# from the individual julia-actions rather than a second invocation of the
+# testitem-workflow template, which would drag along duplicate lint, docs and
+# TagBot jobs.
+
+on:
+  push: {branches: [main,master]}
+  pull_request: {types: [opened,synchronize,reopened,ready_for_review,converted_to_draft,closed]}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}-${{ github.event_name }}
+  cancel-in-progress: true
+
+jobs:
+  # Both jobs skip on a `closed` pull_request event: that event only exists to
+  # cancel the PR's queued and in-progress runs via the concurrency group
+  # above, the same opt-in the testitem-workflow template uses.
+  compute-test-matrix:
+    if: ${{ github.event_name != 'pull_request' || github.event.action != 'closed' }}
+    runs-on: ubuntu-latest
+    outputs:
+      test-matrix: ${{ steps.matrix.outputs.test-matrix }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: julia-actions/julia-compute-test-matrix@v2
+        id: matrix
+        with:
+          include-all-compatible-minor-versions: true
+          include-rc-versions: true
+
+  test:
+    if: ${{ github.event_name != 'pull_request' || github.event.action != 'closed' }}
+    needs: compute-test-matrix
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJson(needs.compute-test-matrix.outputs.test-matrix) }}
+    runs-on: ${{ matrix.os }}
+    continue-on-error: ${{ matrix.allow-failure }}
+    env:
+      # `Pkg.test` resolves in its own sandbox environment, which the manifest
+      # check below cannot see. The suite asserts the JSON version it actually
+      # loaded against this.
+      DEBUGADAPTER_EXPECTED_JSON_VERSION: "0.20"
+    steps:
+      - uses: actions/checkout@v7
+      - uses: julia-actions/install-juliaup@v3
+        with:
+          channel: ${{ matrix.juliaup-channel }}
+      - uses: julia-actions/cache@v3
+      # Same bootstrap as the testitem-workflow template: `julia-buildpkg` only
+      # installs a registry from Julia 1.5 on, and Pkg before that does not
+      # clone one on demand either.
+      - name: Install the General registry on Julia < 1.5
+        shell: bash
+        run: |
+          julia -e '
+            VERSION < v"1.5" || exit()
+            general = joinpath(DEPOT_PATH[1], "registries", "General")
+            isfile(joinpath(general, "Registry.toml")) && exit()
+            if ispath(general)
+              println("Registry at $general is unusable, replacing it")
+              # git marks its object files read-only, which blocks the delete on Windows
+              for (root, dirs, files) in walkdir(general), f in files
+                try chmod(joinpath(root, f), 0o777) catch end
+              end
+              rm(general, recursive=true)
+            end
+            mkpath(dirname(general))
+            run(`git clone --quiet --depth=1 https://github.com/JuliaRegistries/General.git $general`)
+          '
+      # Rewriting the compat entry before buildpkg means the ordinary
+      # instantiate resolves JSON 0.20.x, and any later re-resolution is
+      # equally constrained.
+      - name: Restrict JSON compat to 0.20
+        shell: bash
+        run: julia .ci/force_json_020.jl
+      - uses: julia-actions/julia-buildpkg@v1
+      - name: Verify JSON 0.20 was resolved
+        shell: bash
+        run: julia .ci/verify_json_020.jl
+      - uses: julia-actions/julia-run-testitems@v2
+        with:
+          juliaup-channel: ${{ matrix.juliaup-channel }}
+          profile-name: ${{ format('Julia {0}:{1} (JSON 0.20)', matrix.juliaup-channel, matrix.os) }}

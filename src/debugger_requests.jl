@@ -1,5 +1,46 @@
 # Request handlers
 
+"""
+    current_engine(debug_session) -> Union{DebugEngine,DAPError}
+
+The engine running the code being debugged, or the error to answer a request with when
+there is none.
+
+A client can still be asking about a paused debuggee after the code has finished. The
+adapter acknowledges a step before it takes it, so the client learns that the code ran to
+its end only from the `terminated` event that follows, and whatever it sent in between —
+the `scopes` for the stop it is still showing, another `stepIn` (VS Code sends Step Into
+whatever the debug state is) — arrives with no engine left. That is the protocol being
+asynchronous, not a fault in the adapter, so such a request gets an error response.
+"""
+function current_engine(debug_session::DebugSession)
+    debug_engine = debug_session.debug_engine
+    debug_engine === nothing && return DAPError("No code is being debugged.")
+    return debug_engine
+end
+
+"""
+    paused_frame(debug_session, frame_id = 1) -> Union{JuliaInterpreter.Frame,DAPError}
+
+The frame `frame_id` of the paused debuggee, counted from the innermost one as
+`stackTrace` numbers them, or the error to answer a request with when there is no such
+frame: no code is being debugged, it is not paused, or the id is from a stop whose stack
+has since changed.
+"""
+function paused_frame(debug_session::DebugSession, frame_id::Integer = 1)
+    debug_engine = current_engine(debug_session)
+    debug_engine isa DAPError && return debug_engine
+    debug_engine.frame === nothing && return DAPError("The debuggee is not paused.")
+
+    curr_fr = JuliaInterpreter.leaf(debug_engine.frame)
+    for _ in 2:frame_id
+        curr_fr = curr_fr.caller
+        curr_fr === nothing && return DAPError("Invalid frameId.")
+    end
+
+    return curr_fr
+end
+
 function initialize_request(debug_session::DebugSession, params::InitializeRequestArguments)
     # The REPL-hosted debugger runs many sessions in one process (VSCodeServer's
     # `start_debug_backend`), and JuliaInterpreter's breakpoint registry is process-global.
@@ -303,9 +344,12 @@ end
 function stack_trace_request(debug_session::DebugSession, params::StackTraceArguments)
     @debug "getstacktrace_request"
 
+    debug_engine = current_engine(debug_session)
+    debug_engine isa DAPError && return debug_engine
+
     frames = StackFrame[]
     # TODO Move all of this into DebugEngine
-    fr = debug_session.debug_engine.frame
+    fr = debug_engine.frame
 
     if fr === nothing
         @debug fr
@@ -387,8 +431,8 @@ function stack_trace_request(debug_session::DebugSession, params::StackTraceArgu
             if ret !== nothing
                 source_name = string(curr_fr.framecode.scope)
 
-                DebugEngines.set_source(debug_session.debug_engine, source_name, ret[1])
-                source_id = DebugEngines.get_source_id(debug_session.debug_engine, source_name)
+                DebugEngines.set_source(debug_engine, source_name, ret[1])
+                source_id = DebugEngines.get_source_id(debug_engine, source_name)
 
                 push!(
                     frames,
@@ -426,8 +470,8 @@ function stack_trace_request(debug_session::DebugSession, params::StackTraceArgu
 
                 source_name = string(UUIDs.uuid4())
 
-                DebugEngines.set_source(debug_session.debug_engine, source_name, join(code, '\n'))
-                source_id = DebugEngines.get_source_id(debug_session.debug_engine, source_name)
+                DebugEngines.set_source(debug_engine, source_name, join(code, '\n'))
+                source_id = DebugEngines.get_source_id(debug_engine, source_name)
 
                 push!(
                     frames,
@@ -456,7 +500,7 @@ function stack_trace_request(debug_session::DebugSession, params::StackTraceArgu
             end
         elseif occursin(r"REPL\[\d*\]", file_name)
             source_name = file_name
-            source_id = DebugEngines.get_source_id(debug_session.debug_engine, file_name)
+            source_id = DebugEngines.get_source_id(debug_engine, file_name)
 
             push!(
                     frames,
@@ -496,14 +540,8 @@ end
 function scopes_request(debug_session::DebugSession, params::ScopesArguments)
     @debug "getscope_request"
 
-    curr_fr = JuliaInterpreter.leaf(debug_session.debug_engine.frame)
-
-    i = 1
-
-    while params.frameId > i
-        curr_fr = curr_fr.caller
-        i += 1
-    end
+    curr_fr = paused_frame(debug_session, params.frameId)
+    curr_fr isa DAPError && return curr_fr
 
     curr_scopeof = JuliaInterpreter.scopeof(curr_fr)
     curr_whereis = JuliaInterpreter.whereis(curr_fr)
@@ -538,9 +576,12 @@ end
 function source_request(debug_session::DebugSession, params::SourceArguments)
     @debug "getsource_request"
 
+    debug_engine = current_engine(debug_session)
+    debug_engine isa DAPError && return debug_engine
+
     source_id = params.source.sourceReference
 
-    code = DebugEngines.get_source(debug_session.debug_engine, source_id)
+    code = DebugEngines.get_source(debug_engine, source_id)
 
     return SourceResponseArguments(code, missing)
 end
@@ -945,24 +986,15 @@ function set_variable_request(debug_session::DebugSession, params::SetVariableAr
 end
 
 function restart_frame_request(debug_session::DebugSession, params::RestartFrameArguments)
-    debug_engine = debug_session.debug_engine
     frame_id = params.frameId
 
-    if frame_id < 1 || debug_engine.frame === nothing
-        return DAPError("Invalid frameId.")
-    end
+    frame_id < 1 && return DAPError("Invalid frameId.")
 
-    curr_fr = JuliaInterpreter.leaf(debug_engine.frame)
+    debug_engine = current_engine(debug_session)
+    debug_engine isa DAPError && return debug_engine
 
-    i = 1
-
-    while frame_id > i
-        if curr_fr.caller === nothing
-            return DAPError("Invalid frameId.")
-        end
-        curr_fr = curr_fr.caller
-        i += 1
-    end
+    curr_fr = paused_frame(debug_session, frame_id)
+    curr_fr isa DAPError && return curr_fr
 
     if curr_fr.caller === nothing
         # We are in the top level
@@ -984,12 +1016,15 @@ end
 function exception_info_request(debug_session::DebugSession, params::ExceptionInfoArguments)
     # This request fires on every uncaught-exception stop, and both the id and the
     # description are rendered from the debuggee's own exception object.
-    last_exception = debug_session.debug_engine.last_exception
+    debug_engine = current_engine(debug_session)
+    debug_engine isa DAPError && return debug_engine
+
+    last_exception = debug_engine.last_exception
     exception_id = safe_show(typeof(last_exception))
     exception_description = error_message(last_exception, limit = 100_000)
 
     exception_stacktrace = try
-        Base.invokelatest(sprint, Base.show_backtrace, debug_session.debug_engine.frame)
+        Base.invokelatest(sprint, Base.show_backtrace, debug_engine.frame)
     catch err
         string("Error while printing the backtrace: ", error_message(err))
     end
@@ -1004,17 +1039,8 @@ function evaluate_request(debug_session::DebugSession, params::EvaluateArguments
         return EvaluateResponseArguments("Error: received evaluate request without a frameId, this shouldn't happen for the Julia debugger.", missing, missing, 0, missing, missing, missing)
     end
 
-    curr_fr = debug_session.debug_engine.frame
-    curr_i = 1
-
-    while params.frameId > curr_i
-        if curr_fr.caller !== nothing
-            curr_fr = curr_fr.caller
-            curr_i += 1
-        else
-            break
-        end
-    end
+    curr_fr = paused_frame(debug_session, params.frameId)
+    curr_fr isa DAPError && return curr_fr
 
     try
         ret_val = JuliaInterpreter.eval_code(curr_fr, params.expression)
@@ -1029,7 +1055,10 @@ end
 function continue_request(debug_session::DebugSession, params::ContinueArguments)
     @debug "continue_request"
 
-    DebugEngines.execution_continue(debug_session.debug_engine)
+    debug_engine = current_engine(debug_session)
+    debug_engine isa DAPError && return debug_engine
+
+    DebugEngines.execution_continue(debug_engine)
 
     return ContinueResponseArguments(true)
 end
@@ -1037,7 +1066,10 @@ end
 function next_request(debug_session::DebugSession, params::NextArguments)
     @debug "next_request"
 
-    DebugEngines.execution_next(debug_session.debug_engine)
+    debug_engine = current_engine(debug_session)
+    debug_engine isa DAPError && return debug_engine
+
+    DebugEngines.execution_next(debug_engine)
 
     return NextResponseArguments()
 end
@@ -1045,7 +1077,10 @@ end
 function setp_in_request(debug_session::DebugSession, params::StepInArguments)
     @debug "stepin_request"
 
-    DebugEngines.execution_step_in(debug_session.debug_engine, params.targetId)
+    debug_engine = current_engine(debug_session)
+    debug_engine isa DAPError && return debug_engine
+
+    DebugEngines.execution_step_in(debug_engine, params.targetId)
 
     return StepInResponseArguments()
 end
@@ -1053,7 +1088,10 @@ end
 function step_in_targets_request(debug_session::DebugSession, params::StepInTargetsArguments)
     @debug "stepin_targets_request"
 
-    targets = calls_on_line(debug_session)
+    debug_engine = current_engine(debug_session)
+    debug_engine isa DAPError && return debug_engine
+
+    targets = calls_on_line(debug_engine.frame)
 
     return StepInTargetsResponseArguments([
         StepInTarget(pc, string(expr)) for (pc, expr) in targets
@@ -1063,7 +1101,10 @@ end
 function setp_out_request(debug_session::DebugSession, params::StepOutArguments)
     @debug "stepout_request"
 
-    DebugEngines.execution_step_out(debug_session.debug_engine)
+    debug_engine = current_engine(debug_session)
+    debug_engine isa DAPError && return debug_engine
+
+    DebugEngines.execution_step_out(debug_engine)
 
     return StepOutResponseArguments()
 end

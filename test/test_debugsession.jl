@@ -101,7 +101,7 @@
             close(server)
         end
 
-        return (; events, result=result[], responses=[get(responses, s, nothing) for s in after_seqs], errors)
+        return (events=events, result=result[], responses=[get(responses, s, nothing) for s in after_seqs], errors=errors)
     end
 end
 

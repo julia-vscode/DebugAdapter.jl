@@ -2,29 +2,39 @@
     import Sockets, JSON
 
     """
-        with_debug_session(f) -> (events, result)
+        with_debug_session(f; requests_after=[]) -> (; events, result, responses, errors)
 
     Run a `DebugSession` over a pipe with a minimal DAP client attached, hand `f` the
     session so it can debug code on it, and return the events the client saw along with
     whatever `f` returned.
 
-    The client is only as complete as these tests need: it completes the handshake and
-    records every event it is sent.
+    `requests_after` is a list of `(command, arguments)` the client sends once `f` has
+    returned, while the session is still up; `responses` has the response to each, in
+    order. `errors` collects everything the session handed to its error handler — which
+    in the REPL is the crash reporter.
+
+    The client is only as complete as these tests need: it completes the handshake,
+    records every event it is sent, and sends requests.
     """
-    function with_debug_session(f)
+    function with_debug_session(f; requests_after=[])
         # A loopback socket rather than the named pipe the real adapter is given, because
         # the session only ever sees an `IO` and a port needs no cleanup or platform case.
         port, server = Sockets.listenany(Sockets.localhost, 0)
 
         result = Ref{Any}(nothing)
+        errors = Any[]
+        f_done = Channel{Bool}(1)
+        client_done = Channel{Bool}(1)
 
         server_task = @async begin
             conn = Sockets.accept(server)
             session = DebugAdapter.DebugSession(conn)
-            session_task = @async DebugAdapter.run(session)
+            session_task = @async DebugAdapter.run(session, (err, bt) -> push!(errors, err))
             try
                 result[] = f(session)
             finally
+                put!(f_done, true)
+                take!(client_done)
                 close(session)
                 wait(session_task)
             end
@@ -32,6 +42,7 @@
 
         client = Sockets.connect(Sockets.localhost, port)
         events = String[]
+        responses = Dict{Int,Any}()
         seq = Ref(0)
 
         function request(command, arguments=Dict{String,Any}())
@@ -42,8 +53,11 @@
                 "command" => command,
                 "arguments" => arguments,
             ))
-            write(client, "Content-Length: $(sizeof(payload))\r\n\r\n", payload)
+            write(client, "Content-Length: $(sizeof(payload))
+
+", payload)
             flush(client)
+            return seq[]
         end
 
         reader = @async while isopen(client)
@@ -52,9 +66,14 @@
             n = parse(Int, strip(split(line, ':')[2]))
             readline(client)  # the blank line between header and body
             msg = JSON.parse(String(read(client, n)))
-            msg["type"] == "event" && push!(events, msg["event"])
+            if msg["type"] == "event"
+                push!(events, msg["event"])
+            elseif msg["type"] == "response"
+                responses[msg["request_seq"]] = msg
+            end
         end
 
+        after_seqs = Int[]
         try
             request("initialize", Dict{String,Any}("adapterID" => "julia"))
             # The handshake is only ordered by what the adapter waits on, and `attach`
@@ -65,6 +84,16 @@
             sleep(0.5)
             request("configurationDone", Dict{String,Any}())
 
+            take!(f_done)
+            try
+                for (command, arguments) in requests_after
+                    push!(after_seqs, request(command, arguments))
+                end
+                timedwait(() -> all(haskey(responses, s) for s in after_seqs), 30.0)
+            finally
+                put!(client_done, true)
+            end
+
             wait(server_task)
             sleep(0.5)
         finally
@@ -72,7 +101,7 @@
             close(server)
         end
 
-        return (events, result[])
+        return (events=events, result=result[], responses=[get(responses, s, nothing) for s in after_seqs], errors=errors)
     end
 end
 
@@ -178,4 +207,62 @@ end
         DebugAdapter.SetBreakpointsArguments(source=source, breakpoints=DebugAdapter.SourceBreakpoint[])
     )
     @test count(bp -> bp isa JuliaInterpreter.BreakpointFileLocation, JuliaInterpreter.breakpoints()) == 0
+end
+
+@testitem "requests that arrive after the debuggee has finished get an error response" setup=[DapClient] begin
+    # The adapter acknowledges a step before it takes it, and the client learns that the
+    # code ran to its end only from the `terminated` event that follows. Whatever the client
+    # sent in between — the `scopes` for the stop it is still showing, another `stepIn`
+    # (VS Code sends Step Into whatever the debug state) — arrives with no engine left.
+    # These used to throw a `MethodError`/`FieldError` into the host's crash handler.
+    module FinishedTarget
+        ran = false
+    end
+
+    events, _, responses, errors = with_debug_session(requests_after=[
+        ("stepIn", Dict{String,Any}("threadId" => 1)),
+        ("scopes", Dict{String,Any}("frameId" => 1)),
+        ("stackTrace", Dict{String,Any}("threadId" => 1)),
+        ("next", Dict{String,Any}("threadId" => 1)),
+        ("evaluate", Dict{String,Any}("expression" => "1 + 1", "frameId" => 1)),
+    ]) do session
+        DebugAdapter.debug_code(session, FinishedTarget, "ran = true
+", "body.jl")
+    end
+
+    @test FinishedTarget.ran == true
+    @test count(==("terminated"), events) == 1
+
+    @test length(responses) == 5
+    for response in responses
+        @test response !== nothing
+        @test response["success"] == false
+        @test response["message"] == "No code is being debugged."
+    end
+
+    # Answered, not crashed: nothing reached the session's error handler
+    @test isempty(errors)
+end
+
+@testitem "requests that need an engine or a paused frame answer with an error when there is none" begin
+    session = DebugAdapter.DebugSession(IOBuffer())
+    no_engine = "No code is being debugged."
+
+    for (handler, params) in [
+        (DebugAdapter.continue_request, DebugAdapter.ContinueArguments(threadId=1)),
+        (DebugAdapter.next_request, DebugAdapter.NextArguments(threadId=1)),
+        (DebugAdapter.setp_in_request, DebugAdapter.StepInArguments(threadId=1)),
+        (DebugAdapter.setp_out_request, DebugAdapter.StepOutArguments(threadId=1)),
+        (DebugAdapter.stack_trace_request, DebugAdapter.StackTraceArguments(threadId=1)),
+        (DebugAdapter.scopes_request, DebugAdapter.ScopesArguments(frameId=1)),
+        (DebugAdapter.evaluate_request, DebugAdapter.EvaluateArguments(expression="1", frameId=1)),
+        (DebugAdapter.restart_frame_request, DebugAdapter.RestartFrameArguments(frameId=1)),
+        (DebugAdapter.exception_info_request, DebugAdapter.ExceptionInfoArguments(threadId=1)),
+        (DebugAdapter.source_request, DebugAdapter.SourceArguments(sourceReference=1)),
+        (DebugAdapter.step_in_targets_request, DebugAdapter.StepInTargetsArguments(frameId=1)),
+    ]
+        res = handler(session, params)
+        @test res isa DebugAdapter.DAPError
+        @test res isa DebugAdapter.DAPError && res.msg == no_engine
+    end
 end

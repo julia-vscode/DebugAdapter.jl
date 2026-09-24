@@ -217,19 +217,76 @@ function attempt_to_set_f_breakpoints!(bps)
     end
 end
 
+"""
+The code being debugged cannot be run any further, because of the state of the
+code itself rather than a defect in the debugger.
+
+The session reports such an error in the debug console and ends the run the
+way a finished debuggee does, instead of letting it reach the crash handler.
+"""
+abstract type UserCodeError <: Exception end
+
+"""
+The next top-level expression of the code being debugged could not be loaded:
+expanding its macros or lowering it failed, or evaluating the declaration it
+consists of did. `error` is what Julia threw, and is what `include` would have
+shown the user.
+"""
+struct CodeLoadError <: UserCodeError
+    filename::String
+    error
+end
+
+function Base.showerror(io::IO, err::CodeLoadError)
+    # The error can come from the user's own code, e.g. a macro, whose
+    # `showerror` may be newer than the world this runs in, and may itself fail.
+    message = try
+        Base.invokelatest(sprint, showerror, err.error)
+    catch
+        "Error while displaying the original error."
+    end
+    print(io, "Debugging `", err.filename, "` stopped because its code could not be loaded:\n", message)
+end
+
+# Evaluates the user's code as it is, so whatever it throws is theirs.
+function load_user_code(f, debug_engine)
+    try
+        return f()
+    catch err
+        throw(CodeLoadError(debug_engine.filename, err))
+    end
+end
+
 function get_next_top_level_frame(state)
     state.expr_splitter === nothing && return nothing
-    x = iterate(state.expr_splitter)
+    # Moving to the next expression creates the module of a `module` block.
+    x = load_user_code(() -> iterate(state.expr_splitter), state)
     x === nothing && return nothing
 
     (mod, ex), _ = x
     if Meta.isexpr(ex, :global, 1)
         # global assignment can be lowered, but global declaration can't,
         # let's just evaluate and iterate to next
-        Core.eval(mod, ex)
+        load_user_code(() -> Core.eval(mod, ex), state)
         return get_next_top_level_frame(state)
     end
-    return JuliaInterpreter.Frame(mod, ex)
+    return try
+        JuliaInterpreter.Frame(mod, ex)
+    catch err
+        # Only a failure to lower the user's code is theirs; anything else from
+        # building the frame is a defect in JuliaInterpreter or here, and has to
+        # reach the crash handler. Lowering throws a `LoadError` when expanding a
+        # macro fails (e.g. `L"..."` without LaTeXStrings), on every Julia
+        # version. It returns a syntax error found during lowering instead, which
+        # JuliaInterpreter up to 0.10 (still shipped for Julia < 1.10) turns into
+        # exactly this `ArgumentError`; later versions defer it to when the
+        # statement runs.
+        if err isa LoadError ||
+                (err isa ArgumentError && startswith(err.msg, "lowering returned an error"))
+            throw(CodeLoadError(state.filename, err))
+        end
+        rethrow()
+    end
 end
 
 function is_toplevel_return(frame)
@@ -298,7 +355,7 @@ why it is a type of its own: the caller turns it into a message in the debug
 console, where it used to escape as a bare `ErrorException("Invalid
 expression")` and be filed as a crash.
 """
-struct InvalidExpressionError <: Exception
+struct InvalidExpressionError <: UserCodeError
     filename::String
 end
 
@@ -319,7 +376,8 @@ function Base.run(debug_engine::DebugEngine)
         throw(InvalidExpressionError(debug_engine.filename))
     end
 
-    debug_engine.expr_splitter = JuliaInterpreter.ExprSplitter(debug_engine.mod, ex) # TODO: line numbers ?
+    # Queueing the first expression creates the module of a `module` block.
+    debug_engine.expr_splitter = load_user_code(() -> JuliaInterpreter.ExprSplitter(debug_engine.mod, ex), debug_engine) # TODO: line numbers ?
     debug_engine.frame = get_next_top_level_frame(debug_engine)
 
     if debug_engine.frame === nothing

@@ -13,10 +13,15 @@
     order. `errors` collects everything the session handed to its error handler — which
     in the REPL is the crash reporter.
 
+    `messages`, if given, also receives every message the client is sent, parsed. An
+    `error_handler(session, err, bt)`, if given, is also called for each of those errors
+    as it happens, for a test that has to react to a crash rather than inspect `errors`
+    afterwards.
+
     The client is only as complete as these tests need: it completes the handshake,
     records every event it is sent, and sends requests.
     """
-    function with_debug_session(f; requests_after=[])
+    function with_debug_session(f; requests_after=[], messages=nothing, error_handler=nothing)
         # A loopback socket rather than the named pipe the real adapter is given, because
         # the session only ever sees an `IO` and a port needs no cleanup or platform case.
         port, server = Sockets.listenany(Sockets.localhost, 0)
@@ -29,7 +34,10 @@
         server_task = @async begin
             conn = Sockets.accept(server)
             session = DebugAdapter.DebugSession(conn)
-            session_task = @async DebugAdapter.run(session, (err, bt) -> push!(errors, err))
+            session_task = @async DebugAdapter.run(session, (err, bt) -> begin
+                push!(errors, err)
+                error_handler === nothing || error_handler(session, err, bt)
+            end)
             try
                 result[] = f(session)
             finally
@@ -71,6 +79,7 @@
             elseif msg["type"] == "response"
                 responses[msg["request_seq"]] = msg
             end
+            messages === nothing || push!(messages, msg)
         end
 
         after_seqs = Int[]
@@ -160,6 +169,49 @@ end
 
     @test count(==("output"), events) == 1
     @test UnparseableTarget.ran == true
+    @test count(==("terminated"), events) == 1
+end
+
+@testitem "code that cannot be loaded ends the run with a message, not a crash" setup=[DapClient] begin
+    # `L"..."` without `using LaTeXStrings` parses, and only fails when the expression is
+    # lowered, which the debugger does one top-level expression at a time as it gets to
+    # it. The failure escaped the session loop into the REPL's crash handler, like
+    # unparseable code did. It is the state of the user's code, so it now reaches the
+    # debug console, and the session is still there for whatever is debugged next.
+    module LoadFailureTarget
+        before = false
+        after = false
+        ran = false
+    end
+
+    messages = Any[]
+    crashes = Any[]
+
+    events, _ = with_debug_session(
+        messages=messages,
+        # A crash ends the session loop, which would leave `debug_code` waiting forever;
+        # closing the channel it waits on turns that into a failure instead.
+        error_handler=(session, err, bt) -> (push!(crashes, err); close(session.finished_execution))
+    ) do session
+        DebugAdapter.debug_code(session, LoadFailureTarget, "before = true\ny = L\"a\"\nafter = true\n", "hw1.jl"; notify_termination=false)
+        DebugAdapter.debug_code(session, LoadFailureTarget, "ran = true\n", "body.jl")
+    end
+
+    outputs = [m["body"] for m in messages if m["type"] == "event" && m["event"] == "output"]
+
+    @test isempty(crashes)
+    @test length(outputs) == 1
+    @test outputs[1]["category"] == "stderr"
+    @test occursin("hw1.jl", outputs[1]["output"])
+    @test occursin("@L_str", outputs[1]["output"])
+    # The message has to arrive while the client is still listening.
+    @test findfirst(==("output"), events) < findfirst(==("terminated"), events)
+
+    # The code ran up to the expression that could not be loaded, and no further.
+    @test LoadFailureTarget.before == true
+    @test LoadFailureTarget.after == false
+    # The next chunk in the same session still ran, and the session ended once.
+    @test LoadFailureTarget.ran == true
     @test count(==("terminated"), events) == 1
 end
 

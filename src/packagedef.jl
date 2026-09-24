@@ -162,13 +162,16 @@ function Base.run(debug_session::DebugSession, error_handler=nothing)
                 try
                     run(debug_session.debug_engine)
                 catch err
-                    # A file that is not parseable Julia has nothing to step
+                    # A file that is not parseable Julia, or an expression in it
+                    # that cannot be loaded, leaves nothing (more) to step
                     # through. That is the state of the user's code, so it
                     # belongs in the debug console, where they can act on it,
                     # rather than in the crash handler the rest of this loop
-                    # feeds. The session then ends the way a finished debuggee
-                    # does, below.
-                    err isa DebugEngines.InvalidExpressionError || rethrow()
+                    # feeds. The run then ends the way a finished debuggee
+                    # does, below. When this happens partway through, the
+                    # client has just asked to continue or step, so it is not
+                    # waiting at a stop, just as at a normal end of the code.
+                    err isa DebugEngines.UserCodeError || rethrow()
                     DAPRPC.send(
                         endpoint,
                         output_notification_type,

@@ -116,3 +116,91 @@ end
     @test LaterNotLoaded.y == "Code didn't run"
     @test LaterNotLoaded.z == "Code didn't run"
 end
+
+@testsnippet PausedEngine begin
+    import DebugAdapter.DebugEngines
+    import JuliaInterpreter
+
+    # Runs `code`, saved as a real file so file breakpoints can match it, in an engine
+    # configured the way the extension does by default, and reports each stop on `stops`,
+    # which is closed once the run ends.
+    function start_paused_engine(code, breakpoint_lines)
+        JuliaInterpreter.remove()
+        file = joinpath(mktempdir(), "paused.jl")
+        write(file, code)
+        for line in breakpoint_lines
+            JuliaInterpreter.breakpoint(file, line)
+        end
+
+        stops = Channel{Any}(Inf)
+        de = DebugEngines.DebugEngine(Module(:Paused), code, file, false, (reason, _...) -> put!(stops, reason))
+        # `ALL_MODULES_EXCEPT_MAIN` can never be applied for good, so it is retried after
+        # every step, which is the path that used to throw away the paused framecodes.
+        DebugEngines.set_compiled_functions_modules!(de, ["ALL_MODULES_EXCEPT_MAIN"])
+        task = @async try
+            run(de)
+        finally
+            close(stops)
+        end
+        return de, file, stops, task
+    end
+
+    next_stop(stops) = try
+        take!(stops)
+    catch err
+        err isa InvalidStateException || rethrow()
+        :finished
+    end
+
+    paused_line(de) = de.frame === nothing ? nothing : JuliaInterpreter.linenumber(JuliaInterpreter.leaf(de.frame))
+
+    const PAUSED_CODE = """
+    function f()
+        x = 1
+        y = 2
+        z = 3
+        return x + y + z
+    end
+    f()
+    """
+end
+
+@testitem "a breakpoint added while paused is hit" setup=[PausedEngine] begin
+    de, file, stops, task = start_paused_engine(PAUSED_CODE, [2])
+    try
+        @test next_stop(stops) == DebugEngines.StopReasonBreakpoint
+        @test paused_line(de) == 2
+
+        JuliaInterpreter.breakpoint(file, 4)
+        DebugEngines.execution_continue(de)
+
+        @test next_stop(stops) == DebugEngines.StopReasonBreakpoint
+        @test paused_line(de) == 4
+
+        DebugEngines.execution_continue(de)
+        @test next_stop(stops) == :finished
+    finally
+        DebugEngines.terminate(de)
+        wait(task)
+        JuliaInterpreter.remove()
+    end
+end
+
+@testitem "a breakpoint removed while paused is not hit" setup=[PausedEngine] begin
+    de, file, stops, task = start_paused_engine(PAUSED_CODE, [2, 4])
+    try
+        @test next_stop(stops) == DebugEngines.StopReasonBreakpoint
+        @test paused_line(de) == 2
+
+        for bp in copy(JuliaInterpreter.breakpoints())
+            bp isa JuliaInterpreter.BreakpointFileLocation && bp.line == 4 && JuliaInterpreter.remove(bp)
+        end
+        DebugEngines.execution_continue(de)
+
+        @test next_stop(stops) == :finished
+    finally
+        DebugEngines.terminate(de)
+        wait(task)
+        JuliaInterpreter.remove()
+    end
+end

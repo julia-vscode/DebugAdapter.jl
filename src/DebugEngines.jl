@@ -115,7 +115,34 @@ function set_compiled_functions_modules!(debug_engine::DebugEngine, items::Vecto
     @debug "set_compiled_functions_modules!"
 
     reset_compiled_items()
+    apply_compiled_items!(debug_engine, items)
+end
 
+compiled_items_state() = (
+    copy(JuliaInterpreter.compiled_modules),
+    copy(JuliaInterpreter.compiled_methods),
+    copy(JuliaInterpreter.interpreted_methods)
+)
+
+"""
+Applies the compiled items that could not be applied yet, e.g. because the module
+they name had not been loaded, on top of the current settings.
+
+This runs every time the debuggee stops. Clearing JuliaInterpreter's caches drops
+the framecodes of the paused frames from them, and with those the breakpoints the
+client adds or removes while paused never reach the code that is executing
+(#99). So the caches are only cleared when the retry actually changed something.
+"""
+function retry_compiled_items!(debug_engine::DebugEngine)
+    before = compiled_items_state()
+    apply_compiled_items!(debug_engine, debug_engine.not_yet_set_compiled_items)
+    if compiled_items_state() != before
+        @debug "compiled items changed, clearing caches"
+        JuliaInterpreter.clear_caches()
+    end
+end
+
+function apply_compiled_items!(debug_engine::DebugEngine, items::Vector{String})
     unset = String[]
 
     @debug "setting as compiled" items = items
@@ -304,7 +331,7 @@ function our_debug_command(debug_engine::DebugEngine, cmd::Symbol)
 
         ret = Base.invokelatest(JuliaInterpreter.debug_command, debug_engine.compile_mode, debug_engine.frame, cmd, true)
 
-        set_compiled_functions_modules!(debug_engine, debug_engine.not_yet_set_compiled_items)
+        retry_compiled_items!(debug_engine)
 
         attempt_to_set_f_breakpoints!(debug_engine.not_yet_set_function_breakpoints)
 

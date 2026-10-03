@@ -253,8 +253,8 @@ end
             reason === :finished && break
         end
         @test reason === :finished
-        @test invokelatest(isdefined, de.mod, :evaluated)
-        @test invokelatest(isdefined, de.mod, :after_eval)
+        @test Base.invokelatest(isdefined, de.mod, :evaluated)
+        @test Base.invokelatest(isdefined, de.mod, :after_eval)
     finally
         DebugEngines.terminate(de)
         wait(task)

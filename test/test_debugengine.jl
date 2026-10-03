@@ -165,6 +165,25 @@ end
     """
 end
 
+@testitem "a breakpoint on a later top-level line is hit" setup=[PausedEngine] begin
+    # Julia up to 1.4 parses every top-level expression after the first without
+    # its file, which left the breakpoint on `y = 2` unmatched. Only where the run
+    # stops is checked: a breakpoint at the start of a top-level expression is
+    # reported as a step.
+    de, file, stops, task = start_paused_engine("x = 1\ny = 2\nz = 3\n", [2])
+    try
+        @test next_stop(stops) isa DebugEngines.StopReason
+        @test paused_line(de) == 2
+
+        DebugEngines.execution_continue(de)
+        @test next_stop(stops) == :finished
+    finally
+        DebugEngines.terminate(de)
+        wait(task)
+        JuliaInterpreter.remove()
+    end
+end
+
 @testitem "a breakpoint added while paused is hit" setup=[PausedEngine] begin
     de, file, stops, task = start_paused_engine(PAUSED_CODE, [2])
     try

@@ -382,6 +382,23 @@ is_valid_expression(x) = true # atom
 is_valid_expression(::Nothing) = false # empty
 is_valid_expression(ex::Expr) = !Meta.isexpr(ex, (:incomplete, :error))
 
+# Julia up to 1.4 records the file only in the first top-level line number of
+# parsed code and leaves `nothing` in all later ones. Lowering puts that
+# `nothing` into a `LineInfoNode` field typed `Symbol`, so JuliaInterpreter reads
+# garbage as the file of every top-level frame after the first: file breakpoints
+# on those lines are never hit, and on Windows matching the garbage name against
+# a path can crash the engine.
+function fill_in_missing_files!(ex, filename)
+    ex isa Expr || return ex
+    file = Symbol(filename)
+    for (i, arg) in enumerate(ex.args)
+        if arg isa LineNumberNode && arg.file === nothing
+            ex.args[i] = LineNumberNode(arg.line, file)
+        end
+    end
+    return ex
+end
+
 """
 The code handed to the debugger is not parseable Julia, so there is nothing to
 step through.
@@ -411,6 +428,7 @@ function Base.run(debug_engine::DebugEngine)
     if !is_valid_expression(ex)
         throw(InvalidExpressionError(debug_engine.filename))
     end
+    fill_in_missing_files!(ex, debug_engine.filename)
 
     # Queueing the first expression creates the module of a `module` block.
     debug_engine.expr_splitter = load_user_code(() -> JuliaInterpreter.ExprSplitter(debug_engine.mod, ex), debug_engine) # TODO: line numbers ?

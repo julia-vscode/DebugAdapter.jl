@@ -296,6 +296,33 @@ end
     @test isempty(errors)
 end
 
+@testitem "a variables request sent to the session is answered" setup=[DapClient] begin
+    # The dispatcher wraps the `variables` handler in `invokelatest`, which Base only exports
+    # from Julia 1.9 on. Called unqualified, every `variables` request failed on older Julia
+    # with an `UndefVarError` before the handler ran, so the variables pane never filled in.
+    # Calling `variables_request` directly, as other tests do, does not go through that line.
+    module VariablesTarget
+        ran = false
+    end
+
+    events, _, responses, errors = with_debug_session(requests_after=[
+        ("variables", Dict{String,Any}("variablesReference" => 1)),
+    ]) do session
+        DebugAdapter.debug_code(session, VariablesTarget, "ran = true\n", "body.jl")
+    end
+
+    @test VariablesTarget.ran == true
+
+    @test length(responses) == 1
+    response = responses[1]
+    @test response !== nothing
+    @test response !== nothing && response["success"] == true
+    # The reference is stale once the debuggee has finished, so there is nothing to list.
+    @test response !== nothing && get(get(response, "body", Dict()), "variables", nothing) == []
+
+    @test isempty(errors)
+end
+
 @testitem "requests that need an engine or a paused frame answer with an error when there is none" begin
     session = DebugAdapter.DebugSession(IOBuffer())
     no_engine = "No code is being debugged."

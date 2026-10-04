@@ -74,7 +74,7 @@ function Base.run(debug_session::DebugSession, error_handler=nothing)
         msg_dispatcher[scopes_request_type] = params -> scopes_request(debug_session, params)
         msg_dispatcher[source_request_type] = params -> source_request(debug_session, params)
         # `invokelatest` is needed due to #3083
-        msg_dispatcher[variables_request_type] = params -> invokelatest(variables_request, debug_session, params)
+        msg_dispatcher[variables_request_type] = params -> Base.invokelatest(variables_request, debug_session, params)
         msg_dispatcher[continue_request_type] = params -> continue_request(debug_session, params)
         msg_dispatcher[next_request_type] = params -> next_request(debug_session, params)
         msg_dispatcher[step_in_request_type] = params -> setp_in_request(debug_session, params)

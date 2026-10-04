@@ -124,7 +124,7 @@ end
     # Runs `code`, saved as a real file so file breakpoints can match it, in an engine
     # configured the way the extension does by default, and reports each stop on `stops`,
     # which is closed once the run ends.
-    function start_paused_engine(code, breakpoint_lines)
+    function start_paused_engine(code, breakpoint_lines; compiled_items = ["ALL_MODULES_EXCEPT_MAIN"])
         JuliaInterpreter.remove()
         file = joinpath(mktempdir(), "paused.jl")
         write(file, code)
@@ -136,7 +136,7 @@ end
         de = DebugEngines.DebugEngine(Module(:Paused), code, file, false, (reason, _...) -> put!(stops, reason))
         # `ALL_MODULES_EXCEPT_MAIN` can never be applied for good, so it is retried after
         # every step, which is the path that used to throw away the paused framecodes.
-        DebugEngines.set_compiled_functions_modules!(de, ["ALL_MODULES_EXCEPT_MAIN"])
+        DebugEngines.set_compiled_functions_modules!(de, compiled_items)
         task = @async try
             run(de)
         finally
@@ -221,6 +221,40 @@ end
         DebugEngines.execution_continue(de)
 
         @test next_stop(stops) == :finished
+    finally
+        DebugEngines.terminate(de)
+        wait(task)
+        JuliaInterpreter.remove()
+    end
+end
+
+@testitem "stepping through code a method evaluates continues the method" setup=[PausedEngine] begin
+    # Since JuliaInterpreter 0.12, the code passed to `Core.eval` is interpreted in frames
+    # with a `Module` scope below the calling method's frame. Pausing at their return must
+    # not be taken for the end of the top-level expression, which would drop the method.
+    # `Core` has to stay interpreted for that, so the modules are not compiled here.
+    code = """
+    function f()
+        Core.eval(@__MODULE__, :(evaluated = true))
+        global after_eval = true
+        return nothing
+    end
+    f()
+    """
+    de, file, stops, task = start_paused_engine(code, [2]; compiled_items = String[])
+    try
+        @test next_stop(stops) == DebugEngines.StopReasonBreakpoint
+        @test paused_line(de) == 2
+
+        reason = nothing
+        for _ in 1:200
+            DebugEngines.execution_step_in(de, missing)
+            reason = next_stop(stops)
+            reason === :finished && break
+        end
+        @test reason === :finished
+        @test Base.invokelatest(isdefined, de.mod, :evaluated)
+        @test Base.invokelatest(isdefined, de.mod, :after_eval)
     finally
         DebugEngines.terminate(de)
         wait(task)

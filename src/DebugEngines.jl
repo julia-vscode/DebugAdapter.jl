@@ -322,7 +322,16 @@ function is_toplevel_return(frame)
     else
         false
     end
-    frame.framecode.scope isa Module && (JuliaInterpreter.isexpr(JuliaInterpreter.pc_expr(frame), :return) || is_a_return_node)
+    (JuliaInterpreter.isexpr(JuliaInterpreter.pc_expr(frame), :return) || is_a_return_node) || return false
+    # Only a return of the user's top-level code itself ends the top-level expression. Since
+    # JuliaInterpreter 0.12, code that a method evaluates with `Core.eval` runs in frames
+    # with a `Module` scope too, below the method's frame, and returning from them
+    # continues the method.
+    while frame !== nothing
+        frame.framecode.scope isa Module || return false
+        frame = frame.caller
+    end
+    return true
 end
 
 function our_debug_command(debug_engine::DebugEngine, cmd::Symbol)

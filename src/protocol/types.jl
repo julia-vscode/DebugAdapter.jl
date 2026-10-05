@@ -56,8 +56,11 @@ end
     urlLabel::Union{Missing,String}
 end
 
+# Numbers that share a union with `String` are `Int64` rather than `Int`: the dict
+# constructor passes such a field through unconverted, JSON numbers parse as `Int64`,
+# and on 32-bit Julia `Int64` does not convert to `Union{Int32,String}`.
 @dict_readable struct DAModule <: Outbound
-    id::Union{Int,String}
+    id::Union{Int64,String}
     name::String
     path::Union{Missing,String}
     isOptimized::Union{Missing,Bool}
@@ -102,7 +105,7 @@ end
     endLine::Union{Missing,Int}
     endColum::Union{Missing,Int}
     instructionPointerReference::Union{Missing,String}
-    moduleId::Union{Missing,Int,String}
+    moduleId::Union{Missing,Int64,String}
     presentationHint::Union{Missing,String}
 end
 

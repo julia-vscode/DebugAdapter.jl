@@ -71,6 +71,54 @@ end
     @test normalized["body"] isa Dict{String,Any}
 end
 
+@testitem "DAP ids that are a number or a string accept parsed JSON numbers" begin
+    import JSON
+
+    _parse = DebugAdapter.DAPRPC._parse_json
+
+    # JSON numbers parse as `Int64` even on 32-bit Julia, and the dict constructor hands
+    # a number-or-string field over unconverted. Declared with `Int`, these fields threw a
+    # `MethodError` there. The type checks keep the test meaningful on 64-bit, too.
+    @test fieldtype(DebugAdapter.DAModule, :id) == Union{Int64,String}
+    @test fieldtype(DebugAdapter.StackFrame, :moduleId) == Union{Missing,Int64,String}
+
+    numbered_module = DebugAdapter.DAModule(_parse("{\"id\":5,\"name\":\"Base\"}"))
+    @test numbered_module.id === Int64(5)
+    @test _parse(JSON.json(numbered_module)) == Dict{String,Any}("id" => 5, "name" => "Base")
+    @test DebugAdapter.DAModule(_parse("{\"id\":\"Base\",\"name\":\"Base\"}")).id == "Base"
+
+    numbered_frame = DebugAdapter.StackFrame(_parse("{\"id\":1,\"name\":\"f\",\"line\":3,\"column\":1,\"moduleId\":5}"))
+    @test numbered_frame.moduleId === Int64(5)
+    @test _parse(JSON.json(numbered_frame))["moduleId"] == 5
+    @test DebugAdapter.StackFrame(_parse("{\"id\":1,\"name\":\"f\",\"line\":3,\"column\":1,\"moduleId\":\"Base\"}")).moduleId == "Base"
+end
+
+@testitem "integer fields of DAP types accept parsed JSON numbers" begin
+    # JSON numbers parse as `Int64`. A field declared with `Int` only takes one on 32-bit
+    # Julia, where `Int` is `Int32`, if `Int` is its only member besides `Missing`. In a
+    # union with anything else there is no `convert`. This can only fail on 32-bit legs.
+    union_members(T) = T isa Union ? vcat(union_members(T.a), union_members(T.b)) : Any[T]
+    is_integer_type(T) = T isa DataType && T <: Integer && T !== Bool
+
+    unconvertible = String[]
+    for name in names(DebugAdapter, all=true)
+        isdefined(DebugAdapter, name) || continue
+        T = getfield(DebugAdapter, name)
+        (T isa DataType && T <: DebugAdapter.Outbound && !isabstracttype(T)) || continue
+        for i in 1:fieldcount(T)
+            field_type = fieldtype(T, i)
+            any(is_integer_type, union_members(field_type)) || continue
+            converts = try
+                convert(field_type, Int64(1)) == 1
+            catch
+                false
+            end
+            converts || push!(unconvertible, string(T, ".", fieldname(T, i)))
+        end
+    end
+    @test unconvertible == String[]
+end
+
 @testitem "JSON version under test" begin
     import JSON
 
